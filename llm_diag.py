@@ -1,8 +1,10 @@
 import datetime
+
+from langchain.prompts import PromptTemplate
 from loguru import logger
 import os
 import time
-
+from langchain.chains import SummarizeChain, create_extraction_chain
 
 from langchain.chat_models import ChatAnthropic
 from langchain.prompts.chat import (
@@ -15,29 +17,30 @@ from langchain.schema import AIMessage, HumanMessage, SystemMessage
 import streamlit as st
 from langchain.callbacks import FileCallbackHandler
 from langchain.chains import ConversationalRetrievalChain
-from langchain.document_loaders.confluence import ContentFormat
 from langchain.memory import ConversationSummaryBufferMemory
-from langchain.prompts import PromptTemplate
 from langchain.tools import BraveSearch
+from langchain.prompts.chat import (
+    ChatPromptTemplate,
+    SystemMessagePromptTemplate,
+    AIMessagePromptTemplate,
+    HumanMessagePromptTemplate,
+)
+from langchain.schema import AIMessage, HumanMessage, SystemMessage
 from langchain.agents import Tool
-from langchain.agents import AgentType
-from langchain.agents import initialize_agent
 
 from langchain.text_splitter import TokenTextSplitter
 from langchain.vectorstores import Chroma
 
 import os
 
-os.environ["ANTHROPIC_API_KEY"] = "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"
+os.environ[
+    "ANTHROPIC_API_KEY"] = "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"
 
 # import constants
 # from constants import *
 
 CLAUDE_KEY = "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"
 BRAVE_API_KEY = "BSAG41ajEpimGNrc59lUGOZ1JbZiB7z"
-
-
-
 
 logfile = "output.log"
 
@@ -62,12 +65,52 @@ def get_text_from_docs(docs):
     return [doc.page_content for doc in docs]
 
 
+def get_investigate_prompt():
+    custom_prompt = """You are a Confluence chatbot answering questions. USe the following pieces of context to answer the question at the end.
+            If you don't know the answer, say that you don't know, don't try to make up an answer.  
+            Human: {human_message}
+            {context}
+
+            Question: {question}
+            Helpful Answer:"""
+
+    return ChatPromptTemplate(
+        template=custom_prompt,
+        human_prompt_name="Doctor",
+        human_message_key="human_message",
+    )
+
+
+def get_extraction_prompt():
+    custom_prompt = """You are a Confluence chatbot answering questions. USe the following pieces of context to answer the question at the end.
+            If you don't know the answer, say that you don't know, don't try to make up an answer.  
+            Human: {human_message}
+            {context}
+
+            Question: {question}
+            Helpful Answer:"""
+    return PromptTemplate(
+        template=custom_prompt, input_variables=["conversation"]
+    )
+
+
+def get_quick_answer():
+    chat = ChatAnthropic(model='claude-2')
+    messages = [
+        HumanMessage(
+            content="Can you please summarize this conversation in "
+        )
+    ]
+    chat(messages)
+
+
 class DiagnosisLLM:
     def __init__(self):
         self.embedding = None
         self.vectordb = None
         self.llm = None
-        self.qa_chain = None
+        self.conv_chain = None
+        self.extraction_chain = None
         self.retriever = None
         self.memory = None
         self.docs = None
@@ -77,8 +120,29 @@ class DiagnosisLLM:
     def init_embeddings(self) -> None:
         pass
 
-    def init_models(self) -> None:
+    def init_conv_chain(self) -> None:
         self.llm = ChatAnthropic(model="claude-2", temperature=0.5)
+        memory = ConversationSummaryBufferMemory(memory_key="chat_history", return_messages=True)
+        self.retriever = None
+        self.conv_chain = ConversationalRetrievalChain(
+            llm=self.llm,
+            memory=memory,
+            retriever=self.retriever,
+        )
+
+    def init_extraction_chain(self) -> None:
+        schema = {
+            "properties": {
+                "patient_symptoms": {"type": "string"},
+                "conversation_summary": {"type": "string"},
+                "conversation_keywords": {"type": "string"},
+                "patient_extra_info": {"type": "string"},
+            },
+        }
+        self.extraction_chain = create_extraction_chain(schema, self.llm, prompt=get_extraction_prompt())
+
+    def extract_from_transcript(self, transcript):
+        return self.extraction_chain.run(transcript)
 
     # def web_search(self, query):
     #     return brave_search_tool.run(query)
@@ -103,7 +167,6 @@ class DiagnosisLLM:
         #                                verbose=True,
         #                                memory=self.memory)
         # agent_chain.run(input=question)
-
 
     def load_confluence_documents_from_all_spaces(self):
         if self.docs is not None:
@@ -185,7 +248,8 @@ class DiagnosisLLM:
         embeddings = []
         index = 0
         for doc in documents:
-            response = openai.Embedding.create(model="text-embedding-ada-002", input=[doc], openai_api_key=OPEN_AI_API_KEY)
+            response = openai.Embedding.create(model="text-embedding-ada-002", input=[doc],
+                                               openai_api_key=OPEN_AI_API_KEY)
             embeddings.append(response['data'][0]['embedding'])
             index += 1
             time.sleep(0.2)
@@ -206,13 +270,15 @@ class DiagnosisLLM:
             template=custom_prompt, input_variables=["context", "question"]
         )
         ## Inject custom prompt
-        self.memory = ConversationSummaryBufferMemory(memory_key="chat_history", return_messages=True, llm=self.llm,                                       output_key="answer")
+        self.memory = ConversationSummaryBufferMemory(memory_key="chat_history", return_messages=True, llm=self.llm,
+                                                      output_key="answer")
 
-        #TODO: Use MongoDB here instead
+        # TODO: Use MongoDB here instead
         self.retriever = self.vectordb.as_retriever(search_kwargs={"k": 5})
         self.qa_chain = ConversationalRetrievalChain.from_llm(llm=self.llm,
                                                               retriever=self.retriever,
-                                                              combine_docs_chain_kwargs={"prompt":custom_prompt_template},
+                                                              combine_docs_chain_kwargs={
+                                                                  "prompt": custom_prompt_template},
                                                               return_source_documents=True,
                                                               memory=self.memory,
                                                               )
