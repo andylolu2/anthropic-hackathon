@@ -2,7 +2,7 @@ import datetime
 from loguru import logger
 import os
 import time
-
+import torch
 
 from langchain.chat_models import ChatAnthropic
 from langchain.prompts.chat import (
@@ -25,6 +25,11 @@ from langchain.agents import initialize_agent
 
 from langchain.text_splitter import TokenTextSplitter
 from langchain.vectorstores import Chroma
+
+from langchain.vectorstores import MongoDBAtlasVectorSearch
+from embedder import BertEmbeddings
+
+from medwise import query_medwise
 
 import os
 
@@ -83,11 +88,22 @@ class DiagnosisLLM:
     # def web_search(self, query):
     #     return brave_search_tool.run(query)
 
-    def try_ask(self, question):
-        brave_search_tool = BraveSearch.from_api_key(api_key=BRAVE_API_KEY, search_kwargs={"count": 3})
+    def get_context_from_brave(self, topics, k=5):
+        """
+        Uses brave to perform a semantic internet search for relevant medical documents to the provided topics.
+
+        Args:
+            topics (list[string]): list of topics for internet search
+            k (int, optional): number of documents to return. Defaults to 5.
+
+        Returns:
+            _type_: list of k documents
+        """
+
+        brave_search_tool = BraveSearch.from_api_key(api_key=BRAVE_API_KEY, search_kwargs={"count": k})
         print(brave_search_tool)
-        out = brave_search_tool.run("What's the weather like today?")
-        print(out)
+        out = brave_search_tool.run(f"Medical documents on: {topics}") # TODO prompt engineer improvement
+        return out
         # tools = [
         #     Tool(
         #         name="Current Search",
@@ -104,6 +120,21 @@ class DiagnosisLLM:
         #                                memory=self.memory)
         # agent_chain.run(input=question)
 
+    def get_context_from_medwise(self, topics, k=5, render_js: bool = False):
+        """Performs internet scraping from Medwise for useful documents.
+
+        Args:
+            topics (_type_):  list of topics for medwise search
+            k (int, optional): number of documents to return. Defaults to 5.
+
+        Returns:
+            _type_: ({"url": url, "content": content})
+        """
+        
+        query = " ".join(topics)
+
+        results = query_medwise(query, k=k, render_js=render_js)
+        return results
 
     def load_confluence_documents_from_all_spaces(self):
         if self.docs is not None:
@@ -266,6 +297,48 @@ class DiagnosisLLM:
             logger.error(e)
             logger.error("unable to get source document detail")
 
+    def get_context_from_textbook(self, summary, k=5):
+        """
+        Performs vector search on mongoDB McLeod clinical diagnosis textbook
+
+        Args:
+            summary (string): maximum 512 tokens - the summary of the patient data. Used to query mongoDB
+            k (int): number of documents to return
+
+        Returns:
+            list[tuple[langchain.schema.document.Document, float]]: [(document, score)]
+            
+            Access the document data with document.page_content
+        """
+
+        embed = BertEmbeddings(
+            model_name="michiyasunaga/BioLinkBERT-large",
+            device="cuda" if torch.cuda.is_available() else "cpu",
+        )
+
+        MONGODB_ATLAS_CLUSTER_URI = "mongodb+srv://evanrex:c1UgqaM0U2Ay72Es@cluster0.ebrorq5.mongodb.net/?retryWrites=true&w=majority"
+        ATLAS_VECTOR_SEARCH_INDEX_NAME = "embedding"
+
+        vector_search = MongoDBAtlasVectorSearch.from_connection_string(
+            MONGODB_ATLAS_CLUSTER_URI,
+            "macleod_textbook.paragraphs",
+            embed,
+            index_name=ATLAS_VECTOR_SEARCH_INDEX_NAME,
+        )
+        
+        results = vector_search.similarity_search_with_score(
+            query=summary,
+            k=k,
+        ) # TODO use paragraph.next and paragraph.prev to get window around returned documents
+
+
+        # Display results
+        # for i, result in enumerate(results):
+        #     content, score = result
+        #     print(i, score)
+        #     print(content.page_content)
+        return results
+    
     # def update_docs(self):
     #     collection = self.vectordb._client.get_collection("ConfluenceDocs")
     #     collection_content = collection.get()
