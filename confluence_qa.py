@@ -136,6 +136,48 @@ class DiagnosisLLM:
         results = query_medwise(query, k=k, render_js=render_js)
         return results
 
+    def get_context_from_textbook(self, summary, k=5):
+        """
+        Performs vector search on mongoDB McLeod clinical diagnosis textbook
+
+        Args:
+            summary (string): maximum 512 tokens - the summary of the patient data. Used to query mongoDB
+            k (int): number of documents to return
+
+        Returns:
+            list[tuple[langchain.schema.document.Document, float]]: [(document, score)]
+            
+            Access the document data with document.page_content
+        """
+
+        embed = BertEmbeddings(
+            model_name="michiyasunaga/BioLinkBERT-large",
+            device="cuda" if torch.cuda.is_available() else "cpu",
+        )
+
+        MONGODB_ATLAS_CLUSTER_URI = "mongodb+srv://evanrex:c1UgqaM0U2Ay72Es@cluster0.ebrorq5.mongodb.net/?retryWrites=true&w=majority"
+        ATLAS_VECTOR_SEARCH_INDEX_NAME = "embedding"
+
+        vector_search = MongoDBAtlasVectorSearch.from_connection_string(
+            MONGODB_ATLAS_CLUSTER_URI,
+            "macleod_textbook.paragraphs",
+            embed,
+            index_name=ATLAS_VECTOR_SEARCH_INDEX_NAME,
+        )
+        
+        results = vector_search.similarity_search_with_score(
+            query=summary,
+            k=k,
+        ) # TODO use paragraph.next and paragraph.prev to get window around returned documents
+
+
+        # Display results
+        # for i, result in enumerate(results):
+        #     content, score = result
+        #     print(i, score)
+        #     print(content.page_content)
+        return results
+    
     def load_confluence_documents_from_all_spaces(self):
         if self.docs is not None:
             return self.docs
@@ -297,48 +339,6 @@ class DiagnosisLLM:
             logger.error(e)
             logger.error("unable to get source document detail")
 
-    def get_context_from_textbook(self, summary, k=5):
-        """
-        Performs vector search on mongoDB McLeod clinical diagnosis textbook
-
-        Args:
-            summary (string): maximum 512 tokens - the summary of the patient data. Used to query mongoDB
-            k (int): number of documents to return
-
-        Returns:
-            list[tuple[langchain.schema.document.Document, float]]: [(document, score)]
-            
-            Access the document data with document.page_content
-        """
-
-        embed = BertEmbeddings(
-            model_name="michiyasunaga/BioLinkBERT-large",
-            device="cuda" if torch.cuda.is_available() else "cpu",
-        )
-
-        MONGODB_ATLAS_CLUSTER_URI = "mongodb+srv://evanrex:c1UgqaM0U2Ay72Es@cluster0.ebrorq5.mongodb.net/?retryWrites=true&w=majority"
-        ATLAS_VECTOR_SEARCH_INDEX_NAME = "embedding"
-
-        vector_search = MongoDBAtlasVectorSearch.from_connection_string(
-            MONGODB_ATLAS_CLUSTER_URI,
-            "macleod_textbook.paragraphs",
-            embed,
-            index_name=ATLAS_VECTOR_SEARCH_INDEX_NAME,
-        )
-        
-        results = vector_search.similarity_search_with_score(
-            query=summary,
-            k=k,
-        ) # TODO use paragraph.next and paragraph.prev to get window around returned documents
-
-
-        # Display results
-        # for i, result in enumerate(results):
-        #     content, score = result
-        #     print(i, score)
-        #     print(content.page_content)
-        return results
-    
     # def update_docs(self):
     #     collection = self.vectordb._client.get_collection("ConfluenceDocs")
     #     collection_content = collection.get()
