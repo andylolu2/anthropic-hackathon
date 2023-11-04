@@ -1,0 +1,3 @@
+anthropic
+langchain
+python-dotenv
