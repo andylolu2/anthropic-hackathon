@@ -4,6 +4,7 @@ import requests
 from bs4 import BeautifulSoup, Comment
 
 from claude import ask_claude_md
+from prompts import CLEAN_HTML_PROMPT
 
 
 def scrape(url: str, render_js: bool = False):
@@ -37,9 +38,7 @@ def clean_html(html: str):
     small_html = soup.prettify()
 
     # ask claude to clean it up
-    result = ask_claude_md(
-        f"Below is the HTML for a webpage on medical guidelines. Identify the main content of the page. Ignore all headings, footers, navigation blocks, and unimportant information. Try not to re-word the guidelines. Respond with a single whitespace if you don't think there is meaningful content (e.g. a 404 error / the HTML is not rendered properly).\n\n<html>\n{small_html}\n</html>",
-    )
+    result = ask_claude_md(CLEAN_HTML_PROMPT.format(html=small_html))
 
     return result
 
