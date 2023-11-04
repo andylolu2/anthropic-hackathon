@@ -2,13 +2,14 @@ import warnings
 
 import requests
 from bs4 import BeautifulSoup, Comment
-from playwright.sync_api import sync_playwright
 
 from claude import ask_claude_md
 
 
 def scrape(url: str, render_js: bool = False):
     if render_js:
+        from playwright.sync_api import sync_playwright
+
         with sync_playwright() as p:
             browser = p.chromium.launch()
             page = browser.new_page()
