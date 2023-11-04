@@ -1,0 +1,88 @@
+.App {
+    text-align: center;
+}
+
+.App-logo {
+    height: 40vmin;
+    pointer-events: none;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+    .App-logo {
+        animation: App-logo-spin infinite 20s linear;
+    }
+}
+
+.App-header {
+    background-color: #282c34;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    font-size: calc(10px + 2vmin);
+    color: white;
+}
+
+.App-link {
+    color: #61dafb;
+}
+
+@keyframes App-logo-spin {
+    from {
+        transform: rotate(0deg);
+    }
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+.gradient-border {
+    --border-width: 5px;
+    border: none;
+
+    position: relative;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    font-family: Lato, sans-serif;
+    font-size: 2.5rem;
+    text-transform: uppercase;
+    color: white;
+    background: white;
+    border-radius: var(--border-width);
+
+}
+
+.gradient-border::after {
+     position: absolute;
+     content: "";
+     top: calc(-1 * var(--border-width));
+     left: calc(-1 * var(--border-width));
+     z-index: -1;
+     width: calc(100% + var(--border-width) * 2);
+     height: calc(100% + var(--border-width) * 2);
+    background-size: 300% 300%;
+    background: linear-gradient(
+            60deg,
+            hsl(224, 85%, 66%),
+            hsl(269, 85%, 66%),
+            hsl(314, 85%, 66%),
+            hsl(359, 85%, 66%),
+            hsl(44, 85%, 66%),
+            hsl(89, 85%, 66%),
+            hsl(134, 85%, 66%),
+            hsl(179, 85%, 66%)
+    ) 0 50%;
+    border-radius: calc(2 * var(--border-width));
+ }
+
+.logout-button:hover {
+    text-decoration: underline;
+    color: #555;  /* Adjust color as needed */
+}
+
+.logout-button
+{
+    font-size: 24px;
+}
