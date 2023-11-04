@@ -1,3 +1,6 @@
 anthropic
 langchain
 python-dotenv
+waitress
+flask
+flask_cors
