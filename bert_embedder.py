@@ -2,7 +2,7 @@ from typing import Any, List
 
 import torch
 from langchain.embeddings.base import Embeddings
-from langchain.pydantic_v1 import BaseModel, Extra
+from langchain.pydantic_v1 import BaseModel
 from transformers import AutoModel, AutoTokenizer
 
 
