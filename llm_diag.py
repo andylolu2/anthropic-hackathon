@@ -39,7 +39,11 @@ def get_investigate_prompt(knowledge="", conversation=""):
     {knowledge}
     </knowledge>
     
-    if the {{input}} is "investigate", then your tasks are:
+    if the input given in 
+    <input>
+    {{input}} 
+    </input>
+    is "investigate", then your tasks are:
 
     <tasks>
     As you read through the conversation, pause and think after each important set of responses from the patient. I want you to think of three things given the information you have at each point.
@@ -61,12 +65,18 @@ def get_investigate_prompt(knowledge="", conversation=""):
     Also "diagnostic spaces" is a little confusing maybe, just say most probable differential diagnosis including important life-threatening ones that mandate exclusion.
     </tasks>
     
-    Else, given your current conversation history with the doctor {{history}}, complete the following task: 
+    Else, given your current conversation history with the doctor, complete the following task: 
+    
+    <history>
+    {{history}}
+    </history>
+    
+
     <task>
-    Answer the doctor's question/query. You should use the knowledge and context provided to help you answer the question.
+    Answer the doctor's question/query. Repeat the query under the format of "You have asked me...." and then answer the query clearly. You should use the knowledge and context provided to help you answer the question.
     </task>
     
-    AI: Thinking..."""
+    """
 
     template = template.format(knowledge=knowledge, conversation=conversation)
 
@@ -141,6 +151,31 @@ def get_keyword_prompt():
     return prompt
 
 
+def parse_context(context):
+    guidelines_knowledge = "<guidelines>\n"
+    for item in context["guidelines"]:
+        text = item["content"]
+        guidelines_knowledge += f"<content>\n{text}\n</content>\n\n"
+    guidelines_knowledge += "</guidelines>"
+
+    textbook_knowledge = "<textbook>\n"
+    for text in context["textbook"]:
+        textbook_knowledge += f"<content>\n{text}\n</content>\n\n"
+    textbook_knowledge += "</textbook>"
+
+    web_knowledge = "<web_search>\n"
+    for item in context["web"]:
+        title = item["title"]
+        text = item["snippet"]
+        web_knowledge += f"<title>\n{title}\n</title>\n"
+        web_knowledge += f"<content>\n{text}\n</content>\n\n"
+    web_knowledge += "</web_search>"
+
+    knowledge = guidelines_knowledge + "\n" + textbook_knowledge + "\n" + web_knowledge
+    print(knowledge)
+    return knowledge
+
+
 class DiagnosisLLM:
     def __init__(self):
         self.keywords = None
@@ -150,45 +185,20 @@ class DiagnosisLLM:
         self.summary_chain = None
         self.keyword_chain = None
         self.memory = None
-        self.context = None
+        self.knowledge = None
         self.transcript = None
 
     def init_conv_chain(self) -> None:
         self.llm = ChatAnthropic(model="claude-2", temperature=0.5)
         self.memory = ConversationSummaryBufferMemory(return_messages=True, llm=self.llm)
-        self.get_context()
-        knowledge = self.parse_context()
-        investigation_prompt = get_investigate_prompt(knowledge, self.transcript)
+        context = self.get_context()
+        self.knowledge = parse_context(context)
+        investigation_prompt = get_investigate_prompt(self.knowledge, self.transcript)
         self.conv_chain = ConversationChain(
             llm=self.llm,
             memory=self.memory,
             prompt=investigation_prompt,
         )
-
-    def parse_context(self):
-        # self.context = {"guidelines": medwise, "textbook": textbook, "web": brave}
-        guidelines_knowledge = "<guidelines>\n"
-        for item in self.context["guidelines"]:
-            text = item["content"]
-            guidelines_knowledge += f"<content>\n{text}\n</content>\n\n"
-        guidelines_knowledge += "</guidelines>"
-
-        textbook_knowledge = "<textbook>\n"
-        for text in self.context["textbook"]:
-            textbook_knowledge += f"<content>\n{text}\n</content>\n\n"
-        textbook_knowledge += "</textbook>"
-
-        web_knowledge = "<web_search>\n"
-        for item in self.context["web"]:
-            title = item["title"]
-            text = item["snippet"]
-            web_knowledge += f"<title>\n{title}\n</title>\n"
-            web_knowledge += f"<content>\n{text}\n</content>\n\n"
-        web_knowledge += "</web_search>"
-
-        knowledge = guidelines_knowledge + "\n" + textbook_knowledge + "\n" + web_knowledge
-        print(knowledge)
-        return knowledge
 
     def new_conv_message(self, message):
         self.conv_chain.run({"input": message})
@@ -298,4 +308,4 @@ class DiagnosisLLM:
         textbook = self.get_context_from_textbook(k=k_textbook)
         print("==============textbook=================")
         # print(textbook)
-        self.context = {"guidelines": medwise, "textbook": textbook, "web": new_brave}
+        return {"guidelines": medwise, "textbook": textbook, "web": new_brave}

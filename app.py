@@ -657,4 +657,6 @@ Thank you!
     LLM.init_extraction_chains()
     LLM.extract_from_transcript(transcript)
     LLM.init_conv_chain()
-    # LLM.new_conv_message("investigate")
+    LLM.new_conv_message("investigate")
+    print("\n\n")
+    LLM.new_conv_message("What's the difference between a dog and a lion")
