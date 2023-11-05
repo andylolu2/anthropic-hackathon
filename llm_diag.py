@@ -18,7 +18,7 @@ import os
 
 os.environ[
     "ANTHROPIC_API_KEY"] = "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"
-CLAUDE_KEY = "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"
+CLAUDE_KEY = "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"
 BRAVE_API_KEY = "BSAG41ajEpimGNrc59lUGOZ1JbZiB7z"
 
 
@@ -85,8 +85,6 @@ def get_investigate_prompt(knowledge="", conversation=""):
     )
 
 
-
-
 def get_summary_prompt():
     prompt = ChatPromptTemplate.from_messages([
         ("system",
@@ -151,31 +149,6 @@ def get_keyword_prompt():
     return prompt
 
 
-def parse_context(context):
-    guidelines_knowledge = "<guidelines>\n"
-    for item in context["guidelines"]:
-        text = item["content"]
-        guidelines_knowledge += f"<content>\n{text}\n</content>\n\n"
-    guidelines_knowledge += "</guidelines>"
-
-    textbook_knowledge = "<textbook>\n"
-    for text in context["textbook"]:
-        textbook_knowledge += f"<content>\n{text}\n</content>\n\n"
-    textbook_knowledge += "</textbook>"
-
-    web_knowledge = "<web_search>\n"
-    for item in context["web"]:
-        title = item["title"]
-        text = item["snippet"]
-        web_knowledge += f"<title>\n{title}\n</title>\n"
-        web_knowledge += f"<content>\n{text}\n</content>\n\n"
-    web_knowledge += "</web_search>"
-
-    knowledge = guidelines_knowledge + "\n" + textbook_knowledge + "\n" + web_knowledge
-    print(knowledge)
-    return knowledge
-
-
 class DiagnosisLLM:
     def __init__(self):
         self.keywords = None
@@ -185,32 +158,74 @@ class DiagnosisLLM:
         self.summary_chain = None
         self.keyword_chain = None
         self.memory = None
-        self.knowledge = None
         self.transcript = None
+        self.context = None
 
     def init_conv_chain(self) -> None:
         self.llm = ChatAnthropic(model="claude-2", temperature=0.5)
         self.memory = ConversationSummaryBufferMemory(return_messages=True, llm=self.llm)
-        context = self.get_context()
-        self.knowledge = parse_context(context)
-        investigation_prompt = get_investigate_prompt(self.knowledge, self.transcript)
+        self.get_context()
+        knowledge = self.parse_context()
+        investigation_prompt = get_investigate_prompt(knowledge, self.transcript)
         self.conv_chain = ConversationChain(
             llm=self.llm,
             memory=self.memory,
             prompt=investigation_prompt,
         )
 
-    def new_conv_message(self, message):
-        self.conv_chain.run({"input": message})
-        print(self.memory)
+    def parse_context(self):
+        guidelines_knowledge = "<guidelines>\n"
+        for item in self.context["guidelines"]:
+            text = item["content"]
+            guidelines_knowledge += f"<content>\n{text}\n</content>\n\n"
+        guidelines_knowledge += "</guidelines>"
+
+        textbook_knowledge = "<textbook>\n"
+        for text in self.context["textbook"]:
+            textbook_knowledge += f"<content>\n{text}\n</content>\n\n"
+        textbook_knowledge += "</textbook>"
+
+        web_knowledge = "<web_search>\n"
+        for item in self.context["web"]:
+            title = item["title"]
+            text = item["snippet"]
+            web_knowledge += f"<title>\n{title}\n</title>\n"
+            web_knowledge += f"<content>\n{text}\n</content>\n\n"
+        web_knowledge += "</web_search>"
+
+        knowledge = guidelines_knowledge + "\n" + textbook_knowledge + "\n" + web_knowledge
+        return knowledge
+
+    def get_chat_history(self):
+        chat_history = []
+        for message in self.memory.chat_memory.messages:
+            role = type(message).__name__
+            chat_history.append({"role": role, "content": message.content})
+        return chat_history
+
+    def get_sources(self):
+        links = {"guidelines": [], "web": []}
+        for guideline in self.context["guidelines"]:
+            url = guideline["url"]
+            links["guidelines"].append(url)
+        for web_res in self.context["web"]:
+            url = web_res["link"]
+            links["web"].append(url)
+        return links
+
+    def answer_doctor_query(self, query: str):
+        """
+        Answer the doctor's query backed by the knowledge relevant to the patient's condition
+        """
+        self.conv_chain.run({"input": query})
+        chat_history_so_far = self.get_chat_history()
+        links = self.get_sources()
+        return {"chat_history": chat_history_so_far, "sources": links}
 
     def extract_from_transcript(self, transcript):
         self.transcript = transcript
         self.keywords = self.keyword_chain.invoke({"conversation": transcript}).content
-        print(self.keywords)
-        # Regular expression to find all words enclosed in <keyword> tags
         keywords = re.findall(r'<keyword>(.*?)</keyword>', self.keywords)
-        # Join the words into a single string separated by spaces
         self.keywords = ' '.join(keywords)
 
         time.sleep(2)
@@ -308,4 +323,4 @@ class DiagnosisLLM:
         textbook = self.get_context_from_textbook(k=k_textbook)
         print("==============textbook=================")
         # print(textbook)
-        return {"guidelines": medwise, "textbook": textbook, "web": new_brave}
+        self.context = {"guidelines": medwise, "textbook": textbook, "web": new_brave}
