@@ -66,7 +66,7 @@ def query_medwise(query: str = "HIV testing", k: int = 1, render_js: bool = Fals
 
         try:
             html = scrape(url, render_js=render_js)
-            content = clean_html(html)
+            content = clean_html(html, claude)
             results.append({"url": url, "content": content})
         except Exception as e:
             warnings.warn(f"Could not scrape {url}: {repr(e)}")

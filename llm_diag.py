@@ -1,106 +1,129 @@
-import datetime
-from abc import ABC
+import json
+import re
 
 from langchain.prompts import PromptTemplate, StringPromptTemplate
-# from loguru import logger
-import os
 import time
-from langchain.chains import create_extraction_chain, ConversationChain
+from langchain.chains import ConversationChain
 import torch
 from langchain.chat_models import ChatAnthropic
-from langchain.prompts.chat import (
-    ChatPromptTemplate,
-    SystemMessagePromptTemplate,
-    AIMessagePromptTemplate,
-    HumanMessagePromptTemplate, MessagesPlaceholder,
-)
-from langchain.schema import AIMessage, HumanMessage, SystemMessage
-# import streamlit as st
-from langchain.callbacks import FileCallbackHandler
-from langchain.chains import ConversationalRetrievalChain
 from langchain.memory import ConversationSummaryBufferMemory
 from langchain.tools import BraveSearch
 from langchain.prompts.chat import (
     ChatPromptTemplate,
-    SystemMessagePromptTemplate,
-    AIMessagePromptTemplate,
-    HumanMessagePromptTemplate,
 )
-from langchain.schema import AIMessage, HumanMessage, SystemMessage
-from langchain.agents import Tool
-from langchain.memory import (
-    ConversationBufferMemory,
-    CombinedMemory,
-    ConversationSummaryMemory,
-)
-from langchain.text_splitter import TokenTextSplitter
-from langchain.vectorstores import Chroma
-
 from langchain.vectorstores import MongoDBAtlasVectorSearch
-from pydantic import BaseModel
-
 from embedder import BertEmbeddings
-
 from medwise import query_medwise
-
 import os
 
 os.environ[
     "ANTHROPIC_API_KEY"] = "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"
-
-# import constants
-# from constants import *
-
-CLAUDE_KEY = "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"
+CLAUDE_KEY = "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"
 BRAVE_API_KEY = "BSAG41ajEpimGNrc59lUGOZ1JbZiB7z"
 
-logfile = "output.log"
 
-# logger.add(logfile, colorize=True, enqueue=True)
-handler = FileCallbackHandler(logfile)
+def get_investigate_prompt(knowledge="", conversation=""):
+    template = """The following is a friendly conversation between a doctor and an AI assistant. The AI is talkative and provides lots of specific details from its context. If the AI is not sure of its answer, it says it and explains why it's unsure.
+    You will read a consultation between a GP and a patient that has already happened.
+     The patient starts by saying their initial story and what they would like help with.
+      This is never enough to get to a full diagnosis. In fact the role of an excellent GP is to ask a series of very well phrased questions that most effectively and intelligently dissect the diagnostic search space to reach a set of most probable differential diagnoses, and most importantly to rule out differential diagnoses that are potentially life threatening to the patient, even if they are not the most likely.
+    The conversation takes the form of a series of questions (asked by the doctor) and answers (from the patient).
 
-
-
-
-def get_investigate_prompt():
-    template = """The following is a friendly conversation between a doctor and an AI assistant. The AI is talkative and provides lots of specific details from its context. If the AI does not know the answer to a question, it truthfully says it does not know.
+    The full conversation between the doctor and the patient is as follows:
+    <conversation>
+    {conversation}
+    </conversation>
     
-    {history}
+    Here is the additional domain knowledge and context that has been retrieved based on the conversation that you should use to make more informed reasoning:
+    <knowledge>
+    {knowledge}
+    </knowledge>
     
-    Human: {input}
-    AI:"""
+    if the {{input}} is "investigate", then your tasks are:
+
+    <tasks>
+    As you read through the conversation, pause and think after each important set of responses from the patient. I want you to think of three things given the information you have at each point.
+    The top differential diagnoses that explain the symptoms the patient is describing.
+    The most dangerous diagnoses that even if unlikely could potentially explain the cluster of symptoms from the patient and that therefore you need to rule out
+    And most importantly, given these two types of differentials, what is the most informative next question/set of questions that will allow you to efficiently dissect the diagnostic search space
+    At each point, you will internally compare your next best question/set of questions with the clinician’s actual question/set of questions.  
+
+    Finally, as the consultation comes to an end, I want you to work out:
+    what are the most likely/dangerous diagnostic spaces/differential diagnoses that the doctor HAS or HAS NOT appropriately enquired about and ruled in or out. (For appropriately I mean that the patient’s answer does not leave scope for misunderstanding, and if it does that it should be clarified.)
+    At the end of the consultation, the doctor will give their impression of what is going on, and the next steps they believe should be taken to further clarify what the underlying pathology or pathologies are. At this point, the doctor will ask you “Claude, do you have any further questions or thoughts?” 
+    At this point you will suggest the following: 
+    What are the most important differential diagnoses that the doctor has not successfully enquired about?  
+    What about the consultation makes you believe that?
+    What are the most efficient questions, physical exam findings and investigations  to help rule in or out these differentials?
+
+    Make sure that your suggested steps are  structured by history - examination - investigations and that you do not repeat what has already been asked/said by the doctor.
+
+    Also "diagnostic spaces" is a little confusing maybe, just say most probable differential diagnosis including important life-threatening ones that mandate exclusion.
+    </tasks>
+    
+    Else, given your current conversation history with the doctor {{history}}, complete the following task: 
+    <task>
+    Answer the doctor's question/query. You should use the knowledge and context provided to help you answer the question.
+    </task>
+    
+    AI: Thinking..."""
+
+    template = template.format(knowledge=knowledge, conversation=conversation)
 
     return PromptTemplate(
         input_variables=["history", "input"], template=template
     )
 
 
-PROMPT = """ {my_info}
-{history}
-Human: {input}
-AI:"""
 
 
-# define a custom PromptTemplate that supports your new variables
-# class CustomPromptTemplate(StringPromptTemplate, BaseModel):
-#
-#     def format(self, **kwargs) -> str:
-#         prompt = PROMPT.format(
-#             context=kwargs["context"], question=kwargs["question"]
-#         )
-#         return prompt
-
-# make sure you feed the PromptTemplate with the new variables
-
-
-def get_extraction_prompt():
+def get_summary_prompt():
     prompt = ChatPromptTemplate.from_messages([
         ("system",
-         "You are a helpful chatbot with a lot of knowledge about the medical domain. You are talking to a patient who is describing their symptoms to you. You want to help them by extracting the most important information from their description. You can use the schema to help you."),
-        ("human", """I want you to look at this conversation between a doctor and a patient. I want you to summarize it and extract the key patient symptons and the key topics and keywords brought up so we can use this to search for relevant domain knowledge to create a better diagnosis.
-     Don't forget to look for other attributes than the ones specified in the schema
-     
+         "You are a helpful chatbot with a lot of knowledge about the medical domain. You are talking to a patient who is describing their symptoms to you. You want to help them by extracting the most important information."),
+        ("human", """I want you to look at the following conversation between a doctor and a patient. 
+        
     {conversation}
+    
+    I want you to now summarize this conversation and extract the key patient symptoms and the key topics and keywords brought up so we can use this to search for relevant domain knowledge.
+    Here are 10 textbook chapter titles that you can use as a guide for what to look for:
+    
+    <chapters>
+    "Abdominal pain",
+    "Breast lump",
+    "Chest pain",
+    "Coma and altered consciousness",
+    "Confusion: delirium and dementia",
+    "Diarrhoea",
+    "Dizziness",
+    "Dyspepsia",
+    "Dyspnoea",
+    "Fatigue",
+    "Fever",
+    "Gasrtointestinal haemorrhage: haematemesis and rectal bleeding",
+    "Haematuria",
+    "Haemoptysis",
+    "Headache",
+    "Jaundice",
+    "Joint swelling",
+    "Leg swelling",
+    "Limb weakness",
+    "Low back pain",
+    "Mobility problems: falls and immobility",
+    "Nausea and vomiting",
+    "Palpitation",
+    "Rash: acute generalized skin eruption",
+    "Red eye",
+    "Scrotal swelling",
+    "Shock",
+    "Transient loss of consciousness: syncope and seizures",
+    "Urinary incontinence",
+    "Vaginal bleeding",
+    "Weight loss",
+    </chapters>
+        
+     I want you to tell me what chapters you would like to explore in order to develop a better understanding of the patient's condition. Reply with a structured summary of the conversation and a list of chapters. Each chapter should be enclosed in tags <chapter></chapter>
+     
      """),
     ])
     return prompt
@@ -110,7 +133,7 @@ def get_keyword_prompt():
     prompt = ChatPromptTemplate.from_messages([
         ("system",
          "You are a helpful chatbot with a lot of knowledge about the medical domain. You are observing a conversation of a patient who is describing their symptoms to a doctor. You want to help them by extracting the most important information from their description. "),
-        ("human", """I want you to look at this conversation between a doctor and a patient. I want you to extract three to ten keywords that summarize the important medical topics related to this patient. Reply with these keywords as a list and nothing else.
+        ("human", """I want you to look at this conversation between a doctor and a patient. I want you to extract three to ten most relevant keywords that summarize the important medical topics related to this patient. Reply with these keywords as a list and nothing else. Each keyword should be enclosed in a <keyword></keyword> tag.
     
     {conversation}
     """),
@@ -118,84 +141,81 @@ def get_keyword_prompt():
     return prompt
 
 
-def get_quick_answer():
-    chat = ChatAnthropic(model='claude-2')
-    messages = [
-        HumanMessage(
-            content="Can you please summarize this conversation in "
-        )
-    ]
-    chat(messages)
-
-
-# define a custom PromptTemplate that supports your new variables
-class CustomPromptTemplate(StringPromptTemplate):
-    my_info: str
-
-    def format(self, **kwargs) -> str:
-        kwargs['my_info'] = self.my_info
-        return self.template.format(**kwargs)
-
-
-# make sure you feed the PromptTemplate with the new variables
-
-
 class DiagnosisLLM:
     def __init__(self):
         self.keywords = None
         self.summary = None
-        self.embedding = None
-        self.vectordb = None
         self.llm = None
         self.conv_chain = None
         self.summary_chain = None
         self.keyword_chain = None
-        self.retriever = None
         self.memory = None
-        self.docs = None
-        self.embeddings_map = {}
+        self.context = None
+        self.transcript = None
 
     def init_conv_chain(self) -> None:
         self.llm = ChatAnthropic(model="claude-2", temperature=0.5)
         self.memory = ConversationSummaryBufferMemory(return_messages=True, llm=self.llm)
-        investigation_prompt = get_investigate_prompt()
+        self.get_context()
+        knowledge = self.parse_context()
+        investigation_prompt = get_investigate_prompt(knowledge, self.transcript)
         self.conv_chain = ConversationChain(
             llm=self.llm,
             memory=self.memory,
             prompt=investigation_prompt,
         )
 
-    def new_conv_message(self, message, context):
-        print("new message")
-        out = self.conv_chain.run({"input": message})
+    def parse_context(self):
+        # self.context = {"guidelines": medwise, "textbook": textbook, "web": brave}
+        guidelines_knowledge = "<guidelines>\n"
+        for item in self.context["guidelines"]:
+            text = item["content"]
+            guidelines_knowledge += f"<content>\n{text}\n</content>\n\n"
+        guidelines_knowledge += "</guidelines>"
+
+        textbook_knowledge = "<textbook>\n"
+        for text in self.context["textbook"]:
+            textbook_knowledge += f"<content>\n{text}\n</content>\n\n"
+        textbook_knowledge += "</textbook>"
+
+        web_knowledge = "<web_search>\n"
+        for item in self.context["web"]:
+            title = item["title"]
+            text = item["snippet"]
+            web_knowledge += f"<title>\n{title}\n</title>\n"
+            web_knowledge += f"<content>\n{text}\n</content>\n\n"
+        web_knowledge += "</web_search>"
+
+        knowledge = guidelines_knowledge + "\n" + textbook_knowledge + "\n" + web_knowledge
+        print(knowledge)
+        return knowledge
+
+    def new_conv_message(self, message):
+        self.conv_chain.run({"input": message})
         print(self.memory)
 
     def extract_from_transcript(self, transcript):
-        self.keywords = self.keyword_chain.invoke({"conversation": transcript})
+        self.transcript = transcript
+        self.keywords = self.keyword_chain.invoke({"conversation": transcript}).content
+        print(self.keywords)
+        # Regular expression to find all words enclosed in <keyword> tags
+        keywords = re.findall(r'<keyword>(.*?)</keyword>', self.keywords)
+        # Join the words into a single string separated by spaces
+        self.keywords = ' '.join(keywords)
+
         time.sleep(2)
-        self.summary = self.summary_chain.invoke({"conversation": transcript})
+        # self.summary = self.summary_chain.invoke({"conversation": transcript}).contents
         print("==========summary========")
         print(self.summary)
         print("==========keywords========")
         print(self.keywords)
 
     def init_extraction_chains(self) -> None:
-        summary_prompt = get_extraction_prompt()
+        # summary_prompt = get_summary_prompt()
         keyword_prompt = get_keyword_prompt()
         self.llm = ChatAnthropic(model="claude-2", temperature=0.5)
-        self.summary_chain = summary_prompt | self.llm
+        # self.summary_chain = summary_prompt | self.llm
         self.keyword_chain = keyword_prompt | self.llm
-
-        # schema = {
-        #     "properties": {
-        #         "patient_symptoms": {"type": "string"},
-        #         "conversation_summary": {"type": "string"},
-        #         "conversation_keywords": {"type": "string"},
-        #         "patient_extra_info": {"type": "string"},
-        #     },
-        # }
-        # self.extraction_chain = create_extraction_chain(schema, self.llm)
-        # print(self.extraction_chain)
 
     def get_context_from_brave(self, k=5):
         """
@@ -210,27 +230,10 @@ class DiagnosisLLM:
         """
 
         brave_search_tool = BraveSearch.from_api_key(api_key=BRAVE_API_KEY, search_kwargs={"count": k})
-        print(brave_search_tool)
-
-        out = brave_search_tool.run(f"Medical documents on: {self.topics}")  # TODO prompt engineer improvement
+        out = brave_search_tool.run(f"Medical documents on: {self.keywords}")  # TODO prompt engineer improvement
         return out
-        # tools = [
-        #     Tool(
-        #         name="Current Search",
-        #         func=brave_search_tool.run,
-        #         description="useful for when you need to answer questions about current events or the current state of the world"
-        #     ),
-        # ]
-        # self.memory = ConversationSummaryBufferMemory(memory_key="chat_history", return_messages=True, llm=self.llm)
-        #
-        # agent_chain = initialize_agent(tools,
-        #                                self.llm,
-        #                                agent=AgentType.CHAT_CONVERSATIONAL_REACT_DESCRIPTION,
-        #                                verbose=True,
-        #                                memory=self.memory)
-        # agent_chain.run(input=question)
 
-    def get_context_from_medwise(self, k=5, render_js: bool = False):
+    def get_context_from_medwise(self, k=1, render_js: bool = False):
         """Performs internet scraping from Medwise for useful documents.
 
         Args:
@@ -241,7 +244,7 @@ class DiagnosisLLM:
             _type_: ({"url": url, "content": content})
         """
 
-        results = query_medwise(self.topics, k=k, render_js=render_js)
+        results = query_medwise(self.keywords, k=k, render_js=render_js)
         return results
 
     def get_context_from_textbook(self, k=5):
@@ -274,202 +277,25 @@ class DiagnosisLLM:
         )
 
         results = vector_search.similarity_search_with_score(
-            query=self.summary,
+            query=self.keywords,
             k=k,
         )  # TODO use paragraph.next and paragraph.prev to get window around returned documents
 
-        # Display results
-        # for i, result in enumerate(results):
-        #     content, score = result
-        #     print(i, score)
-        #     print(content.page_content)
-        return results
+        results_list = []
+        for i, result in enumerate(results):
+            doc, score = result
+            results_list.append(doc.page_content)
+        return results_list
 
-    def get_context(self, k_brave=5, k_medwise=5, k_textbook=5):
+    def get_context(self, k_brave=1, k_medwise=1, k_textbook=1):
         brave = self.get_context_from_brave(k=k_brave)
-        medwise = self.get_context_from_medwise(k=k_medwise)
-        textbook = self.get_context_from_textbook(k=k_textbook)
         print("==============brave=================")
-        print(brave)
+        new_brave = json.loads(brave)
+        time.sleep(2)
+        medwise = self.get_context_from_medwise(k=k_medwise)
         print("==============medwise=================")
-        print(medwise)
+        # print(medwise)
+        textbook = self.get_context_from_textbook(k=k_textbook)
         print("==============textbook=================")
-        print(textbook)
-
-    #
-    #
-    # def load_confluence_documents_from_all_spaces(self):
-    #     if self.docs is not None:
-    #         return self.docs
-    #     # space_keys = load_confluence_spaces()
-    #     target_spaces = ['INF', 'RD']
-    #     all_docs = []
-    #     for space_key in target_spaces:
-    #         logger.info(f"Loading documents from space with key {space_key}")
-    #         confluence_docs = load_confluence_documents(space_key)
-    #         all_docs.extend(confluence_docs)
-    #     self.docs = all_docs
-    #     logger.info(f"Loaded {len(self.docs)} documents from {constants.confluence_domain}")
-    #     return all_docs
-    #
-    # def extract_all_recently_modified_docs(self):
-    #     all_docs = self.load_confluence_documents_from_all_spaces()
-    #     page_ids = [doc.metadata["id"] for doc in all_docs]
-    #     last_updated_dates = {}
-    #     for page_id in page_ids:
-    #         history = CONFLUENCE.history(page_id)
-    #         last_updated_dates[page_id] = (
-    #             datetime.datetime.strptime(history["lastUpdated"]["when"][0:10], "%Y-%m-%d").strftime("%Y-%m-%d"))
-    #     sorted_last_updated = dict(sorted(last_updated_dates.items(), key=lambda x: x[1], reverse=True))
-    #     date = list(sorted_last_updated.items())[0][1]
-    #     docs_to_update = list({k: v for k, v in sorted_last_updated.items() if v == date}.keys())
-    #     return docs_to_update
-    #
-    # def vector_db_confluence_docs(self, force_reload: bool = False) -> None:
-    #     """
-    #     creates vector db for the embeddings and persists them or loads a vector db from the persist directory
-    #     """
-    #     if persist_directory and os.path.exists(persist_directory) and not force_reload:
-    #         ## Load from the persist db
-    #         logger.info("Loading vector database")
-    #         self.vectordb = Chroma(persist_directory=persist_directory, embedding_function=self.embedding,
-    #                                collection_name="Torstone")
-    #         logger.info(f"Vector embedding database successfully loaded from {persist_directory}")
-    #
-    #     else:
-    #         logger.info("Loading Confluence documents")
-    #         ## 1. Extract the documents
-    #         documents = self.load_confluence_documents_from_all_spaces()
-    #         logger.info("Splitting texts")
-    #         ## 2. Split the texts
-    #         # Use only the TokenTextSplitter to ensure token boundaries are respected
-    #         text_splitter = TokenTextSplitter(chunk_size=3000, chunk_overlap=50,
-    #                                           encoding_name="cl100k_base")  # Increase chunk_overlap if needed
-    #         split_documents = text_splitter.split_documents(documents)
-    #
-    #         texts = [doc.page_content for doc in split_documents]
-    #         client = chromadb.PersistentClient(path=persist_directory)
-    #         self.vectordb = Chroma(client=client, persist_directory=persist_directory,
-    #                                embedding_function=self.embedding, collection_name="Torstone")
-    #         delay_factor = 1.0
-    #         ## 3. Create Embeddings and add to chroma store
-    #         while True:
-    #             try:
-    #                 # embeddings = self.get_embeddings(texts)
-    #                 ids = [str(e) for e in list(range(0, len(texts)))]
-    #                 metadatas = [doc.metadata for doc in split_documents]
-    #                 logger.info(
-    #                     f"Creating embeddings for {len(split_documents)} documents and storing in vector database")
-    #                 embeddings = self.get_embeddings(texts)
-    #                 self.vectordb._collection.add(ids=ids, metadatas=metadatas, embeddings=embeddings, documents=texts)
-    #                 logger.info(f"Vector embedding database successfully created and stored in {persist_directory}")
-    #
-    #             except Exception as e:
-    #                 logger.error(f"API Error: {e}")
-    #                 logger.debug(f"Retrying in 10 seconds...")
-    #                 time.sleep(10 * delay_factor)
-    #                 delay_factor += 0.1
-    #                 continue
-    #             break
-    #
-    # # TODO: Get embeddings from BERT instead (the biomedicine one)
-    # def get_embeddings(self, documents):
-    #     pass
-    #     embeddings = []
-    #     index = 0
-    #     for doc in documents:
-    #         response = openai.Embedding.create(model="text-embedding-ada-002", input=[doc],
-    #                                            openai_api_key=OPEN_AI_API_KEY)
-    #         embeddings.append(response['data'][0]['embedding'])
-    #         index += 1
-    #         time.sleep(0.2)
-    #     return embeddings
-    #
-    # def retrieval_qa_chain(self):
-    #     """
-    #     Creates retrieval qa chain using vectordb as retriever and LLM to complete the prompt
-    #     """
-    #     custom_prompt = """You are a Confluence chatbot answering questions. USe the following pieces of context to answer the question at the end.
-    #     If you don't know the answer, say that you don't know, don't try to make up an answer.
-    #
-    #     {context}
-    #
-    #     Question: {question}
-    #     Helpful Answer:"""
-    #     custom_prompt_template = PromptTemplate(
-    #         template=custom_prompt, input_variables=["context", "question"]
-    #     )
-    #     ## Inject custom prompt
-    #     self.memory = ConversationSummaryBufferMemory(memory_key="chat_history", return_messages=True, llm=self.llm,
-    #                                                   output_key="answer")
-    #
-    #     # TODO: Use MongoDB here instead
-    #     self.retriever = self.vectordb.as_retriever(search_kwargs={"k": 5})
-    #     self.qa_chain = ConversationalRetrievalChain.from_llm(llm=self.llm,
-    #                                                           retriever=self.retriever,
-    #                                                           combine_docs_chain_kwargs={
-    #                                                               "prompt": custom_prompt_template},
-    #                                                           return_source_documents=True,
-    #                                                           memory=self.memory,
-    #                                                           )
-    #
-    # def get_chat_history(self, output, sources):
-    #     chat_history = []
-    #     for message in output["chat_history"]:
-    #         role = message.type.upper()
-    #         chat_history.append({"role": role, "content": message.content})
-    #     # chat_history[-1]["content"] += "\n"
-    #     # chat_history[-1]["content"] += sources
-    #     return chat_history
-    #
-    # def answer_confluence(self, question: str):
-    #     """
-    #     Answer the question
-    #     """
-    #     result = self.qa_chain({"question": question})
-    #     retrieved_documents = result['source_documents']
-    #     total_length = sum([len(doc.page_content) for doc in retrieved_documents])
-    #     print(total_length)
-    #     print(self.qa_chain.combine_docs_chain.llm_chain.prompt)
-    #     search = self.vectordb.similarity_search_with_score(question, k=5)
-    #     print(search)
-    #     links = [doc.metadata['source'] for doc in retrieved_documents]
-    #     sources = "\n ".join(links)
-    #     chat_history_so_far = self.get_chat_history(result, sources)
-    #     answer = result['answer']
-    #     logger.info(f"Question asked: {question}")
-    #     logger.info(f"Documents in which information was found: \n {sources}")
-    #     logger.info(f"Chat history: \n {chat_history_so_far}")
-    #     logger.info(f"Answer to the question:\n {answer}")
-    #     return {"answer": answer, "chat_history": chat_history_so_far, "sources": links}
-    #
-    # def display_documents(self, question):
-    #     search = self.vectordb.similarity_search_with_score(question, k=5)
-    #     try:
-    #         st.write("This information was found in:")
-    #         for doc in search:
-    #             score = doc[1]
-    #             try:
-    #                 page_num = doc[0].metadata['page']
-    #             except:
-    #                 page_num = "txt snippets"
-    #             source = doc[0].metadata['source']
-    #             # With a streamlit expander
-    #             with st.expander(
-    #                     "Source: " + str(source) + " - Page: " + str(page_num) + "; Similarity Score: " + str(score)):
-    #                 st.write(doc[0].page_content)
-    #     except Exception as e:
-    #         logger.error(e)
-    #         logger.error("unable to get source document detail")
-
-    # def update_docs(self):
-    #     collection = self.vectordb._client.get_collection("ConfluenceDocs")
-    #     collection_content = collection.get()
-    #     metadatas = collection_content['metadatas']
-    #     embedding_ids = collection_content['ids']
-    #     self.embeddings_map = {metadatas[i]['id']: embedding_ids[i] for i in range(len(metadatas))}
-    #     page_ids = self.extract_all_recently_modified_docs()
-    #     documents = load_confluence_documents_from_page_ids(page_ids)
-    #     texts = get_text_from_docs(documents)
-    #     embedding_ids_to_update = [self.embeddings_map[page_id] for page_id in page_ids]
-    #     self.vectordb.add_texts(texts=texts, ids=embedding_ids_to_update)
+        # print(textbook)
+        self.context = {"guidelines": medwise, "textbook": textbook, "web": new_brave}
