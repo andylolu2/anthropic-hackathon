@@ -1,14 +1,15 @@
 import "./App.css";
 
 import axios from "axios";
-import React, { useEffect, useState } from "react";
+import React, { useState } from "react";
 
 import EmojiPeopleIcon from "@mui/icons-material/EmojiPeople";
 import SearchIcon from "@mui/icons-material/Search";
 import { Box, Button, InputAdornment, TextField, Typography } from "@mui/material";
 
 import Chat from "./Chat";
-import Message, { MessageProps } from "./Message";
+import data from "./data.json";
+import { MessageProps } from "./Message";
 
 let domain = window.location.origin;
 
@@ -30,28 +31,7 @@ function App() {
     };
 
     const uploadTranscript = async () => {
-        console.log("uploading transcript");
-        let transcript = [
-            { role: "DOCTOR", content: "Hello, I am Dr. Smith. How can I help you today?" } as MessageProps,
-            { role: "PATIENT", content: "I have a headache." } as MessageProps,
-            { role: "DOCTOR", content: "How long have you had this headache?" } as MessageProps,
-            { role: "PATIENT", content: "About 3 days." } as MessageProps,
-            {
-                role: "DOCTOR",
-                content:
-                    "How long have you had this headache? How long have you had this headache? How long have you had this headache? How long have you had this headache? How long have you had this headache? ",
-            } as MessageProps,
-            { role: "PATIENT", content: "I have a headache." } as MessageProps,
-            { role: "DOCTOR", content: "How long have you had this headache?" } as MessageProps,
-            { role: "PATIENT", content: "About 3 days." } as MessageProps,
-            {
-                role: "DOCTOR",
-                content:
-                    "How long have you had this headache? How long have you had this headache? How long have you had this headache? How long have you had this headache? How long have you had this headache? ",
-                sources: [{ source: "https://www.google.com", title: "Google" }],
-            } as MessageProps,
-        ];
-        setTranscript(transcript);
+        setTranscript(data);
     };
 
     const classN = loading ? "gradient-border" : "";

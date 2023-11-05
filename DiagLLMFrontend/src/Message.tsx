@@ -8,7 +8,7 @@ import PersonIcon from "@mui/icons-material/Person";
 import { Box, Link, Typography } from "@mui/material";
 
 export interface MessageProps {
-    role: "DOCTOR" | "PATIENT" | "AI";
+    role: string;
     content: string;
     sources?: any[];
 }
@@ -39,6 +39,7 @@ export const Message: React.FC<MessageProps> = ({ role, content, sources }) => {
                             mt: "6px",
                             mb: "0",
                             wordWrap: "break-word",
+                            whiteSpace: "pre-wrap",
                         },
                     }}
                 >
