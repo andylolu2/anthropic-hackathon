@@ -2,7 +2,7 @@ import os
 from typing import List, Literal, Optional
 
 import uvicorn
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -44,9 +44,16 @@ class Query(BaseModel):
 async def query_agent(query: Query):
     transcript = query.transcript
     chat_history = query.chat_history
-    print(transcript)
-    print(chat_history)
-    chat_history.append(Message(role="AI", content="This is a response"))
+
+    if len(transcript) == 0:
+        raise HTTPException(status_code=400, detail="Transcript cannot be empty")
+
+    if len(chat_history) == 0:
+        # Initial request
+        chat_history.append(Message(role="AI", content="Investigating..."))
+    else:
+        chat_history.append(Message(role="AI", content="I'm still thinking..."))
+
     return {"response": {"chat_history": chat_history}}
 
 

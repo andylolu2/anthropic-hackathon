@@ -24,10 +24,14 @@ function App() {
         setInput("Torstone Intelligence is working on your query...");
         messages.push({ role: "DOCTOR", content: input });
         const result = await axios.post(`${domain}/query`, { chat_history: messages, transcript: transcript });
-        let chatHistory = result.data.response.chat_history;
-        setMessages(chatHistory);
+        if (result.status !== 200) {
+            console.log(result);
+        } else {
+            let chatHistory = result.data.response.chat_history;
+            setMessages(chatHistory);
+            setInput("");
+        }
         setLoading(false);
-        setInput("");
     };
 
     const uploadTranscript = async () => {
@@ -78,6 +82,11 @@ function App() {
                         placeholder="Ask a question..."
                         style={{ fontStyle: "italic" }} // Italicized placeholder
                         onChange={(e) => setInput(e.target.value)}
+                        onKeyDown={(e) => {
+                            if (e.key === "Enter") {
+                                handleQuery();
+                            }
+                        }}
                         InputProps={{
                             style: { height: "4rem" },
                             startAdornment: (
@@ -89,9 +98,6 @@ function App() {
                         fullWidth
                         sx={{ "& fieldset": loading ? { border: "none" } : { border: "3px solid gray" } }}
                     />
-                    <Button variant="contained" sx={{ mt: 2 }} color={"secondary"} onClick={handleQuery}>
-                        Get Answer
-                    </Button>
                 </Box>
             </Box>
         </Box>
