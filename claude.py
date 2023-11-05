@@ -1,28 +1,15 @@
 from dotenv import load_dotenv
 from langchain.chat_models import ChatAnthropic
 from langchain.prompts import PromptTemplate
+
 from custom_parser import MarkdownOutputParser
 
 load_dotenv()
 
 
-class Claude():
+class Claude:
     def __init__(self):
         self.model = ChatAnthropic(max_tokens=10_000)
-
-    def ask_claude(self, query: str, answer_beginning: str = ""):
-        prompt = PromptTemplate(
-            template="""
-
-            Human:
-            {query}
-            Assistant:
-            {answer_beginning}""",
-            input_variables=["query", "answer_beginning"],
-        )
-
-        chain = prompt | self.model
-        return chain.invoke({"query": query, "answer_beginning": answer_beginning}).content
 
     def ask_claude_md(self, query: str):
         parser = MarkdownOutputParser()
