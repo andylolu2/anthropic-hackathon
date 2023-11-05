@@ -13,6 +13,10 @@ export interface MessageProps {
     sources?: any[];
 }
 
+function truncate(str: string, n: number) {
+    return str.length > n ? str.slice(0, n - 1) + "..." : str;
+}
+
 export const Message: React.FC<MessageProps> = ({ role, content, sources }) => {
     return (
         <Box
@@ -27,11 +31,11 @@ export const Message: React.FC<MessageProps> = ({ role, content, sources }) => {
         >
             <Box display={"flex"} px={1} py={2} flexDirection={"row"}>
                 {role === "PATIENT" ? (
-                    <PersonIcon style={{ fontSize: "2rem", marginRight: "0.5rem" }} />
+                    <PersonIcon style={{ fontSize: "2rem", marginRight: "0.5rem", marginTop: "6px" }} />
                 ) : role === "DOCTOR" ? (
-                    <MedicalInformationIcon style={{ fontSize: "2rem", marginRight: "0.5rem" }} />
+                    <MedicalInformationIcon style={{ fontSize: "2rem", marginRight: "0.5rem", marginTop: "6px" }} />
                 ) : (
-                    <MemoryIcon style={{ fontSize: "2rem", color: "#c4272c", marginRight: "0.5rem" }} />
+                    <MemoryIcon style={{ fontSize: "2rem", color: "#c4272c", marginRight: "0.5rem", marginTop: "6px" }} />
                 )}
                 <Box
                     sx={{
@@ -47,17 +51,16 @@ export const Message: React.FC<MessageProps> = ({ role, content, sources }) => {
                 </Box>
             </Box>
             {sources && (
-                <Box mt={1} pl={2}>
+                <Box p={2}>
                     <Typography variant={"body1"} fontWeight={"bold"} mb={0}>
-                        {" "}
-                        Sources:{" "}
+                        Sources:
                     </Typography>
                     <ul style={{ whiteSpace: "nowrap", margin: 0 }}>
                         {sources.map((source, index) => (
                             <li>
-                                <Box key={index} mb={1} py={1} pl={2}>
+                                <Box key={index} pt={1}>
                                     <Link key={index} href={source.source} color="secondary.main">
-                                        {source.title}{" "}
+                                        {truncate(source.title, 50)}
                                     </Link>
                                 </Box>
                             </li>

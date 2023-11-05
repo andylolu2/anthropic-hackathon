@@ -10,7 +10,7 @@ from pydantic import BaseModel
 
 from llm_diag import DiagnosisLLM
 
-set_debug(True)
+# set_debug(True)
 
 app = FastAPI()
 
@@ -69,15 +69,18 @@ async def query_agent(query: Query):
     #     model.init_conv_chain()
     model.init_conv_chain()
 
+    current_message = chat_history[-1].content
+
     if len(chat_history) <= 1:  # Initial request
-        model.memory.chat_memory.messages = []
-        model.new_conv_message("investigate")
-        output = model.memory.chat_memory.messages[-1].content
-        chat_history.append(Message(role="AI", content=output))
-    else:
-        model.new_conv_message(chat_history[-1].content)
-        output = model.memory.chat_memory.messages[-1].content
-        chat_history.append(Message(role="AI", content=output))
+        model.memory.chat_memory.messages = []  # Clear memory
+
+    response = model.answer_doctor_query(current_message)
+    output = response["chat_history"][-1]["content"]
+    sources = []
+    for key in ("guidelines", "web"):
+        for url in response["sources"][key]:
+            sources.append(Source(title=url, source=url))
+    chat_history.append(Message(role="AI", content=output, sources=sources))
 
     return {"response": {"chat_history": chat_history}}
 

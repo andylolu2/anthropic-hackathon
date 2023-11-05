@@ -10,7 +10,7 @@ interface ChatProps {
 
 const Chat: React.FC<ChatProps> = ({ messages }) => {
     return (
-        <Box mt={3} sx={{ gap: "1rem" }}>
+        <Box sx={{ gap: "1rem" }}>
             {messages.map((message, index) => (
                 <Message key={index} role={message.role} content={message.content} sources={message.sources} />
             ))}

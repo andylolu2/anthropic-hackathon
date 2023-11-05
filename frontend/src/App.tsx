@@ -54,19 +54,19 @@ function App() {
             </Box>
             <Box pl={"15%"} pr={"15%"} mt={"5%"}>
                 <Typography variant={"h2"} fontSize={"calc(1.6rem + 2   vw)"} fontWeight={800} mb={4}>
-                    Junior Doctor
+                    HealthEcho
                 </Typography>
                 <Box display="flex" position={"relative"}>
-                    <Box sx={{ backgroundColor: "primary.main", borderRadius: "0.5em" }} width={"50%"} p={2} mr={1} overflow={"auto"}>
-                        <Typography variant={"h4"} display={"block"} fontSize={"calc(1.6rem + 2   vw)"} fontWeight={800}>
+                    <Box sx={{ backgroundColor: "primary.main", borderRadius: "0.5em" }} width={"50%"} p={3} mr={2} overflow={"auto"}>
+                        <Typography variant={"h4"} display={"block"} fontSize={"calc(1.6rem + 2   vw)"} fontWeight={800} mb={2}>
                             Transcript
                         </Typography>
                         <Box sx={{ borderRadius: "0.5em" }} overflow={"auto"} maxHeight={500}>
                             <Chat messages={transcript} />
                         </Box>
                     </Box>
-                    <Box sx={{ backgroundColor: "primary.main", borderRadius: "0.5em" }} width={"50%"} p={2} ml={1}>
-                        <Typography variant={"h4"} display={"block"} fontSize={"calc(1.6rem + 2   vw)"} fontWeight={800}>
+                    <Box sx={{ backgroundColor: "primary.main", borderRadius: "0.5em" }} width={"50%"} p={3} ml={2}>
+                        <Typography variant={"h4"} display={"block"} fontSize={"calc(1.6rem + 2   vw)"} fontWeight={800} mb={2}>
                             Conversation
                         </Typography>
                         <Box sx={{ borderRadius: "0.5em" }} overflow={"auto"} maxHeight={500}>
