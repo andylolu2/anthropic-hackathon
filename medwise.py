@@ -2,7 +2,7 @@ import warnings
 
 import requests
 from bs4 import BeautifulSoup, Comment
-from llm_diag import Claude
+from claude import Claude
 from prompts import CLEAN_HTML_PROMPT
 
 
@@ -66,7 +66,7 @@ def query_medwise(query: str = "HIV testing", k: int = 1, render_js: bool = Fals
 
         try:
             html = scrape(url, render_js=render_js)
-            content = clean_html(html)
+            content = clean_html(html, claude)
             results.append({"url": url, "content": content})
         except Exception as e:
             warnings.warn(f"Could not scrape {url}: {repr(e)}")
