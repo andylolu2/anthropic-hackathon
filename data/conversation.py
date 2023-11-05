@@ -314,12 +314,118 @@ Claude, do you have any further questions or thoughts
 Patient
 """
 
+BAD_RAW = """
+Doctor  00:11
+Hi, my name is Dr. Smith. I'm one of the medical registrars here on the medical take.
+What's your name again? 
+
+Patient 00:16
+My name is Ricardo.
+I've come because I haven't been feeling so well lately.
+Basically, some there are moments where I get these really weird feelings on my chest like it feels like my heart is pounding.
+And sometimes I get quite dizzy with it.
+And I don't Yeah, I've sort of not thought about it much. But then the other day I was I felt really lightheaded really dizzy, and I and the heart was going and I sort of thought, okay, maybe this is something I should come and check out.
+
+Doctor  01:01
+Okay, okay. Thank you for coming to see us today. I think it's really important that we get it checked out. Can you tell me a little bit more about how it started and when it started.
+
+Patient  01:12
+So happened so about, like two, three months ago, I had COVID and it was fairly mild.
+I just yeah, had Covid and then I recovered quite well. And then I think it was after you know, after that that thing started to get a bit worse. When I first noticed it, it was quite mild, and it sort of went away for after a few seconds to maybe a minute.
+And then it sort of nothing happened for maybe a week. Or two. And then I think maybe I was doing some exercise. I was like running out running and then again I felt it and then I sort of stopped and and I felt I was feeling a little bit lightheaded at that point, which is why I sort of stopped but I don't know because I feel like there's been a lot going on as well. Recently, I had my big exams, which I'm sort of still quite stressed about because I still got more going on.
+So I haven't been sort of living the most healthy of lives as it were. Lots of Red Bull and coffee.
+I know that's not great. But yeah, so I don't know. That's sort of that.
+
+Doctor  02:30
+okay, so thank you. Thank you for sharing your thoughts as well. Is there anything in particular you concerned this might be?
+
+Patient   02:38
+Well, I don't know. I mean, I know that my someone from like my family-  my uncle from my dad's side and and some of my cousins and I'm not sure about my dad, but I feel like they've they've had some heart issues before.
+I don't remember exactly what but obviously when knowing that that's been the case, and that I had something that maybe feels like it's my heart. It made me quite worried about it. So I don't know what but I think that that concerned me.
+
+Doctor  03:12
+Okay. So thank you for sharing that. Do you mind if I ask you a few more questions about the heart racing in particular and then I can ask you a few more questions about your lifestyle in general and your personal history. Would that be okay?
+
+Patient  03:30
+Okay.
+
+Doctor  03:32
+And just checking, It's only heart racing and feeling a little dizzy that you've experienced? There is no other symptoms that you're worried about that you'd like to mention?
+
+Patient  03:41
+No, no, I mean, sometimes I'm like, I feel quite short of breath with this heart racing thing.
+But But um, no, otherwise if I've been okay, I think Yeah.
+
+Doctor  03:55
+So if we start with the heart racing. So you mentioned that you think it started when you had COVID? Correct? 
+
+Patient 
+Yeah, or just I think just after COVID. 
+
+Doctor 
+Just after COVID. And you mentioned that you've thought the duration of your episodes were about seconds to minutes long. 
+
+Patient
+Yeah, yeah. Yeah. So yeah, seconds, two minutes. I did say probably about a minute each time. You know, I I tried to clock it once, but I think it was around a minute or two.
+
+Doctor  04:23
+Okay. Has that changed at all? With time?
+
+Patient  04:28
+Ah, I don't think so? No.
+
+Doctor  04:37
+And the frequency in which you were having these episodes initially, you said it was quite sporadic.
+Is that still the case? Or have you managed to, you know, undercover a pattern?
+
+Patient  04:49
+Yeah, it's that's a good question.
+I feel like it tends to happen when I'm maybe more stressed, or maybe when I'm doing some exercise.
+It has sort of been happening a little bit more frequently recently. Which is also why I really wanted to come in.
+
+Doctor  05:10
+So in a day, how often might it happen?
+
+Patient  05:15
+Initially, it was happening once every 2,3,4 days.
+Now it's it's more like once a day, sometimes more, maybe multiple times a day.
+
+Doctor  05:30
+Is there anything that you think might trigger it in particular in activity or could be also when you're just lying in bed resting?
+
+Patient  05:40
+Yeah, I think it has happened. I you know, I don't know. I don't know. Actually, I feel like it has happened once they've been resting, but it tends to be more when I'm doing something.
+
+Doctor  05:52
+Okay, no problem.
+And when it happens, can you tap out how it feels like in your chest?
+
+Patient  06:02
+It's it feels a little bit heavy on my chest, and it feels quite like it like the heart is beating really hard. And it feels a little bit and faster than normal. 
+
+Doctor
+Are you skipping beats? Do you feel like your heart is beating irregularly?
+
+Patient  06:29
+I I haven't paid attention to that. I don't know.
+
+Doctor  06:36
+And did you think you might be able to tap on your chest how it feels like how fast that can go? 
+
+Patient 
+Yeah. Something like pat pat pat pat pat... that sort of thing.
+
+Doctor
+Ok that's great! So I think it seems like this is likely stress associated, rather than anything serious.
+Claude, do you have any further questions or thoughts
+"""
+
 
 doctor_pattern = re.compile(r"Doctor\s*(\d+:\d+)?\n([\s\S]*?)(?=\n\nPatient)")
 patient_pattern = re.compile(r"Patient\s*(\d+:\d+)?\n([\s\S]*?)(?=\n\nDoctor)")
 
-doctor_results = re.findall(doctor_pattern, RAW)
-patient_results = re.findall(patient_pattern, RAW)
+doctor_results = re.findall(doctor_pattern, BAD_RAW)
+patient_results = re.findall(patient_pattern, BAD_RAW)
 
 data = []
 for doctor_result, patient_result in itertools.zip_longest(
@@ -340,5 +446,5 @@ for doctor_result, patient_result in itertools.zip_longest(
             }
         )
 
-with open("data.json", "w") as f:
+with open("data_bad.json", "w") as f:
     json.dump(data, f, indent=2)

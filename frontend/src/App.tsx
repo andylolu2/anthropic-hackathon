@@ -8,7 +8,7 @@ import SearchIcon from "@mui/icons-material/Search";
 import { Box, Button, InputAdornment, LinearProgress, TextField, Typography } from "@mui/material";
 
 import Chat from "./Chat";
-import data from "./data.json";
+import data from "./data_bad.json";
 import { MessageProps } from "./Message";
 
 let domain = window.location.origin;

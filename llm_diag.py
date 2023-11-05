@@ -4,6 +4,7 @@ import re
 import time
 
 import torch
+from dotenv import load_dotenv
 from langchain.cache import InMemoryCache
 from langchain.chains import ConversationChain
 from langchain.chat_models import ChatAnthropic
@@ -17,18 +18,16 @@ from langchain.vectorstores import MongoDBAtlasVectorSearch
 from bert_embedder import BertEmbeddings
 from medwise import query_medwise
 
-set_llm_cache(InMemoryCache())
+load_dotenv()
 
-os.environ[
-    "ANTHROPIC_API_KEY"
-] = "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"
-CLAUDE_KEY = "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"
-BRAVE_API_KEY = "BSAG41ajEpimGNrc59lUGOZ1JbZiB7z"
+set_llm_cache(InMemoryCache())
 
 
 def get_investigate_prompt(knowledge="", conversation=""):
     template = """
-You are having a friendly conversation with me, a trained doctor. You should be talkative and provide lots of specific details from its context. If you are not sure of the answer, says it and explain why you are unsure.
+Hi Claude, I am a medical expert analysing the quality of history taken by doctors. As part of the simulation, you will be asked to provide your thoughts to compare to mine.
+
+You are having a professional conversation with me, a trained doctor. You should be talkative and provide lots of specific details from its context. If you are not sure of the answer, says it and explain why you are unsure.
 You will read a consultation between a GP (me) and a patient that has already happened.
 The patient starts by saying their initial story and what they would like help with.
 This is never enough to get to a full diagnosis. In fact the role of an excellent GP is to ask a series of very well phrased questions that most effectively and intelligently dissect the diagnostic search space to reach a set of most probable differential diagnoses, and most importantly to rule out differential diagnoses that are potentially life threatening to the patient, even if they are not the most likely.
@@ -39,13 +38,8 @@ The full conversation between the doctor and the patient is as follows:
 {conversation}
 </conversation>
 
-Here is the additional domain knowledge and context that has been retrieved based on the conversation that you should use to make more informed reasoning:
-<knowledge>
-{knowledge}
-</knowledge>
-
 <tasks_if_investigation>
-As you read through the conversation, pause and think after each important set of responses from the patient. I want you to think of three things given the information you have at each point.
+As you read through the conversation, pause and think after each response from the patient. I want you to think of three things given the information you have at each point.
 The top differential diagnoses that explain the symptoms the patient is describing.
 The most dangerous diagnoses that even if unlikely could potentially explain the cluster of symptoms from the patient and that therefore you need to rule out
 And most importantly, given these two types of differentials, what is the most informative next question/set of questions that will allow you to efficiently dissect the diagnostic search space
@@ -53,12 +47,17 @@ At each point, you will internally compare your next best question/set of questi
 
 Finally, showing your reasoning:
 1. What are the most probable differential diagnoses including important life-threatening ones that mandate exclusion that the doctor HAS NOT appropriately enquired about and ruled in or out. (For appropriately I mean that the patient's answer does not leave scope for misunderstanding, and if it does that it should be clarified.)
-2. What are the most important differential diagnoses that I have not successfully enquired about?  
+2. What are the most important differential diagnoses that I have not enquired about at all?
 3. What about the consultation makes you believe that? Reference relevant parts of the conversation.
 4. What are the most efficient questions, physical exam findings and investigations to help rule in or out these differentials?
 
 Make sure that your suggested steps are structured by history - examination - investigations and that you do not repeat what I have already been asked/said.
 </tasks_if_investigation>
+
+Here is the additional domain knowledge and context that has been retrieved based on the conversation that you should use to make more informed reasoning:
+<knowledge>
+{knowledge}
+</knowledge>
 
 Below is your conversation with me so far:
 <conversation_history>
@@ -70,7 +69,7 @@ Doctor: {{input}}
 </current_input>
 
 If my current input DOESN'T pertain to performing further investigation, then simply answer my question/query appropriately. You are encouraged to use the knowledge and context provided to help you answer the question.
-Otherwise, if my current input DOES pertain to performing further investigation, answer according to the instructions above.
+Otherwise, if my current input DOES pertain to performing further investigation, answer according to the instructions in the <tasks_if_investigation> tag above.
 """.strip()
 
     template = template.format(knowledge=knowledge, conversation=conversation)
@@ -190,8 +189,10 @@ class DiagnosisLLM:
         self.keyword_chain = keyword_prompt | self.llm
 
     def get_context_from_brave(self, k=5):
+        if k == 0:
+            return json.dumps([])
         brave_search_tool = BraveSearch.from_api_key(
-            api_key=BRAVE_API_KEY, search_kwargs={"count": k}
+            api_key=os.environ["BRAVE_API_KEY"], search_kwargs={"count": k}
         )
         out = brave_search_tool.run(
             f"Medical documents on: {self.keywords}"
@@ -199,10 +200,14 @@ class DiagnosisLLM:
         return out
 
     def get_context_from_medwise(self, k=1, render_js: bool = False):
+        if k == 0:
+            return []
         results = query_medwise(self.keywords, k=k, render_js=render_js)
         return results
 
     def get_context_from_textbook(self, k=5):
+        if k == 0:
+            return []
         embed = BertEmbeddings(
             model_name="michiyasunaga/BioLinkBERT-large",
             device="cuda" if torch.cuda.is_available() else "cpu",
@@ -229,7 +234,7 @@ class DiagnosisLLM:
             results_list.append(doc.page_content)
         return results_list
 
-    def get_context(self, k_brave=1, k_medwise=10, k_textbook=1):
+    def get_context(self, k_brave=0, k_medwise=4, k_textbook=0):
         brave = self.get_context_from_brave(k=k_brave)
         print("==============brave=================")
         new_brave = json.loads(brave)
