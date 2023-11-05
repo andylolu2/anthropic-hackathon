@@ -1,19 +1,4 @@
-import uvicorn
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
-from flask import Flask, jsonify, request
-from flask_cors import CORS
-from pydantic import BaseModel
-from waitress import serve
-
 from llm_diag import DiagnosisLLM
-
-
-class Source(BaseModel):
-    source: str
-    title: str
-
 
 if __name__ == "__main__":
     # serve(app, host="0.0.0.0", port=5000)

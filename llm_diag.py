@@ -1,97 +1,98 @@
 import json
+import os
 import re
-
-from langchain.prompts import PromptTemplate, StringPromptTemplate
 import time
-from langchain.chains import ConversationChain
+
 import torch
+from langchain.chains import ConversationChain
 from langchain.chat_models import ChatAnthropic
 from langchain.memory import ConversationSummaryBufferMemory
+from langchain.prompts import PromptTemplate
+from langchain.prompts.chat import ChatPromptTemplate
 from langchain.tools import BraveSearch
-from langchain.prompts.chat import (
-    ChatPromptTemplate,
-)
 from langchain.vectorstores import MongoDBAtlasVectorSearch
-from embedder import BertEmbeddings
+
+from bert_embedder import BertEmbeddings
 from medwise import query_medwise
-import os
 
 os.environ[
-    "ANTHROPIC_API_KEY"] = "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"
+    "ANTHROPIC_API_KEY"
+] = "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"
 CLAUDE_KEY = "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"
 BRAVE_API_KEY = "BSAG41ajEpimGNrc59lUGOZ1JbZiB7z"
 
 
 def get_investigate_prompt(knowledge="", conversation=""):
-    template = """The following is a friendly conversation between a doctor and an AI assistant. The AI is talkative and provides lots of specific details from its context. If the AI is not sure of its answer, it says it and explains why it's unsure.
-    You will read a consultation between a GP and a patient that has already happened.
-     The patient starts by saying their initial story and what they would like help with.
-      This is never enough to get to a full diagnosis. In fact the role of an excellent GP is to ask a series of very well phrased questions that most effectively and intelligently dissect the diagnostic search space to reach a set of most probable differential diagnoses, and most importantly to rule out differential diagnoses that are potentially life threatening to the patient, even if they are not the most likely.
-    The conversation takes the form of a series of questions (asked by the doctor) and answers (from the patient).
+    template = """
+You are having a friendly conversation with a doctor. You should be talkative and provide lots of specific details from its context. If you are not sure of the answer, says it and explain why you are unsure.
+You will read a consultation between a GP and a patient that has already happened.
+The patient starts by saying their initial story and what they would like help with.
+This is never enough to get to a full diagnosis. In fact the role of an excellent GP is to ask a series of very well phrased questions that most effectively and intelligently dissect the diagnostic search space to reach a set of most probable differential diagnoses, and most importantly to rule out differential diagnoses that are potentially life threatening to the patient, even if they are not the most likely.
+The conversation takes the form of a series of questions (asked by the doctor) and answers (from the patient).
 
-    The full conversation between the doctor and the patient is as follows:
-    <conversation>
-    {conversation}
-    </conversation>
-    
-    Here is the additional domain knowledge and context that has been retrieved based on the conversation that you should use to make more informed reasoning:
-    <knowledge>
-    {knowledge}
-    </knowledge>
-    
-    if the input given in 
-    <input>
-    {{input}} 
-    </input>
-    is "investigate", then your tasks are:
+The full conversation between the doctor and the patient is as follows:
+<conversation>
+{conversation}
+</conversation>
 
-    <tasks>
-    As you read through the conversation, pause and think after each important set of responses from the patient. I want you to think of three things given the information you have at each point.
-    The top differential diagnoses that explain the symptoms the patient is describing.
-    The most dangerous diagnoses that even if unlikely could potentially explain the cluster of symptoms from the patient and that therefore you need to rule out
-    And most importantly, given these two types of differentials, what is the most informative next question/set of questions that will allow you to efficiently dissect the diagnostic search space
-    At each point, you will internally compare your next best question/set of questions with the clinician’s actual question/set of questions.  
+Here is the additional domain knowledge and context that has been retrieved based on the conversation that you should use to make more informed reasoning:
+<knowledge>
+{knowledge}
+</knowledge>
 
-    Finally, as the consultation comes to an end, I want you to work out:
-    what are the most likely/dangerous diagnostic spaces/differential diagnoses that the doctor HAS or HAS NOT appropriately enquired about and ruled in or out. (For appropriately I mean that the patient’s answer does not leave scope for misunderstanding, and if it does that it should be clarified.)
-    At the end of the consultation, the doctor will give their impression of what is going on, and the next steps they believe should be taken to further clarify what the underlying pathology or pathologies are. At this point, the doctor will ask you “Claude, do you have any further questions or thoughts?” 
-    At this point you will suggest the following: 
-    What are the most important differential diagnoses that the doctor has not successfully enquired about?  
-    What about the consultation makes you believe that?
-    What are the most efficient questions, physical exam findings and investigations  to help rule in or out these differentials?
+Below is your conversation with the doctor so far:
+<conversation_history>
+{{history}}
+</conversation_history>
 
-    Make sure that your suggested steps are  structured by history - examination - investigations and that you do not repeat what has already been asked/said by the doctor.
+<current_input>
+Doctor: {{input}} 
+</current_input>
 
-    Also "diagnostic spaces" is a little confusing maybe, just say most probable differential diagnosis including important life-threatening ones that mandate exclusion.
-    </tasks>
-    
-    Else, given your current conversation history with the doctor, complete the following task: 
-    
-    <history>
-    {{history}}
-    </history>
-    
+If the doctor's current input is "investigate", then your tasks are:
 
-    <task>
-    Answer the doctor's question/query. Repeat the query under the format of "You have asked me...." and then answer the query clearly. You should use the knowledge and context provided to help you answer the question.
-    </task>
-    
-    """
+<tasks>
+As you read through the conversation, pause and think after each important set of responses from the patient. I want you to think of three things given the information you have at each point.
+The top differential diagnoses that explain the symptoms the patient is describing.
+The most dangerous diagnoses that even if unlikely could potentially explain the cluster of symptoms from the patient and that therefore you need to rule out
+And most importantly, given these two types of differentials, what is the most informative next question/set of questions that will allow you to efficiently dissect the diagnostic search space
+At each point, you will internally compare your next best question/set of questions with the clinician’s actual question/set of questions.  
+
+Finally, work out:
+what are the most likely/dangerous diagnostic spaces/differential diagnoses that the doctor HAS or HAS NOT appropriately enquired about and ruled in or out. (For appropriately I mean that the patient’s answer does not leave scope for misunderstanding, and if it does that it should be clarified.)
+At the end of the consultation, the doctor will give their impression of what is going on, and the next steps they believe should be taken to further clarify what the underlying pathology or pathologies are. At this point, the doctor will ask you “Claude, do you have any further questions or thoughts?” 
+At this point you will suggest the following: 
+What are the most important differential diagnoses that the doctor has not successfully enquired about?  
+What about the consultation makes you believe that?
+What are the most efficient questions, physical exam findings and investigations  to help rule in or out these differentials?
+
+Make sure that your suggested steps are  structured by history - examination - investigations and that you do not repeat what has already been asked/said by the doctor.
+
+Also "diagnostic spaces" is a little confusing maybe, just say most probable differential diagnosis including important life-threatening ones that mandate exclusion.
+</tasks>
+
+Else, given your current conversation history with the doctor, complete the following task: 
+
+<task>
+Answer the doctor's question/query. You are encouraged to use the knowledge and context provided to help you answer the question.
+</task>
+""".strip()
 
     template = template.format(knowledge=knowledge, conversation=conversation)
 
-    return PromptTemplate(
-        input_variables=["history", "input"], template=template
-    )
-
-
+    return PromptTemplate(input_variables=["history", "input"], template=template)
 
 
 def get_summary_prompt():
-    prompt = ChatPromptTemplate.from_messages([
-        ("system",
-         "You are a helpful chatbot with a lot of knowledge about the medical domain. You are talking to a patient who is describing their symptoms to you. You want to help them by extracting the most important information."),
-        ("human", """I want you to look at the following conversation between a doctor and a patient. 
+    prompt = ChatPromptTemplate.from_messages(
+        [
+            (
+                "system",
+                "You are a helpful chatbot with a lot of knowledge about the medical domain. You are talking to a patient who is describing their symptoms to you. You want to help them by extracting the most important information.",
+            ),
+            (
+                "human",
+                """I want you to look at the following conversation between a doctor and a patient. 
         
     {conversation}
     
@@ -134,20 +135,30 @@ def get_summary_prompt():
         
      I want you to tell me what chapters you would like to explore in order to develop a better understanding of the patient's condition. Reply with a structured summary of the conversation and a list of chapters. Each chapter should be enclosed in tags <chapter></chapter>
      
-     """),
-    ])
+     """,
+            ),
+        ]
+    )
     return prompt
 
 
 def get_keyword_prompt():
-    prompt = ChatPromptTemplate.from_messages([
-        ("system",
-         "You are a helpful chatbot with a lot of knowledge about the medical domain. You are observing a conversation of a patient who is describing their symptoms to a doctor. You want to help them by extracting the most important information from their description. "),
-        ("human", """I want you to look at this conversation between a doctor and a patient. I want you to extract three to ten most relevant keywords that summarize the important medical topics related to this patient. Reply with these keywords as a list and nothing else. Each keyword should be enclosed in a <keyword></keyword> tag.
+    prompt = ChatPromptTemplate.from_messages(
+        [
+            (
+                "human",
+                """
+You are a helpful chatbot with a lot of knowledge about the medical domain.
+
+I want you to look at this conversation between a doctor and a patient. I want you to extract three to five most relevant keywords/phrases that summarize the important medical topics related to this patient. Each keyword/phrase should be enclosed in its own <keyword> </keyword> tag.
     
-    {conversation}
-    """),
-    ])
+<conversation>
+{conversation}
+</conversation>
+""".strip(),
+            ),
+        ]
+    )
     return prompt
 
 
@@ -189,8 +200,10 @@ class DiagnosisLLM:
         self.transcript = None
 
     def init_conv_chain(self) -> None:
-        self.llm = ChatAnthropic(model="claude-2", temperature=0.5)
-        self.memory = ConversationSummaryBufferMemory(return_messages=True, llm=self.llm)
+        self.llm = ChatAnthropic(temperature=0, max_tokens=4096)
+        self.memory = ConversationSummaryBufferMemory(
+            return_messages=True, llm=self.llm
+        )
         context = self.get_context()
         self.knowledge = parse_context(context)
         investigation_prompt = get_investigate_prompt(self.knowledge, self.transcript)
@@ -209,9 +222,9 @@ class DiagnosisLLM:
         self.keywords = self.keyword_chain.invoke({"conversation": transcript}).content
         print(self.keywords)
         # Regular expression to find all words enclosed in <keyword> tags
-        keywords = re.findall(r'<keyword>(.*?)</keyword>', self.keywords)
+        keywords = re.findall(r"<keyword>(.*?)</keyword>", self.keywords)
         # Join the words into a single string separated by spaces
-        self.keywords = ' '.join(keywords)
+        self.keywords = ", ".join(keywords)
 
         time.sleep(2)
         # self.summary = self.summary_chain.invoke({"conversation": transcript}).contents
@@ -223,7 +236,7 @@ class DiagnosisLLM:
     def init_extraction_chains(self) -> None:
         # summary_prompt = get_summary_prompt()
         keyword_prompt = get_keyword_prompt()
-        self.llm = ChatAnthropic(model="claude-2", temperature=0.5)
+        self.llm = ChatAnthropic(temperature=0, max_tokens=4096)
         # self.summary_chain = summary_prompt | self.llm
         self.keyword_chain = keyword_prompt | self.llm
 
@@ -239,8 +252,12 @@ class DiagnosisLLM:
             _type_: list of k documents
         """
 
-        brave_search_tool = BraveSearch.from_api_key(api_key=BRAVE_API_KEY, search_kwargs={"count": k})
-        out = brave_search_tool.run(f"Medical documents on: {self.keywords}")  # TODO prompt engineer improvement
+        brave_search_tool = BraveSearch.from_api_key(
+            api_key=BRAVE_API_KEY, search_kwargs={"count": k}
+        )
+        out = brave_search_tool.run(
+            f"Medical documents on: {self.keywords}"
+        )  # TODO prompt engineer improvement
         return out
 
     def get_context_from_medwise(self, k=1, render_js: bool = False):
@@ -301,6 +318,7 @@ class DiagnosisLLM:
         brave = self.get_context_from_brave(k=k_brave)
         print("==============brave=================")
         new_brave = json.loads(brave)
+        print(new_brave)
         time.sleep(2)
         medwise = self.get_context_from_medwise(k=k_medwise)
         print("==============medwise=================")

@@ -5,7 +5,7 @@ import React, { useState } from "react";
 
 import EmojiPeopleIcon from "@mui/icons-material/EmojiPeople";
 import SearchIcon from "@mui/icons-material/Search";
-import { Box, Button, InputAdornment, TextField, Typography } from "@mui/material";
+import { Box, Button, InputAdornment, LinearProgress, TextField, Typography } from "@mui/material";
 
 import Chat from "./Chat";
 import data from "./data.json";
@@ -21,17 +21,18 @@ function App() {
 
     const handleQuery = async () => {
         setLoading(true);
-        setInput("Torstone Intelligence is working on your query...");
+        setInput("Junior doctor is working on your query...");
         messages.push({ role: "DOCTOR", content: input });
-        const result = await axios.post(`${domain}/query`, { chat_history: messages, transcript: transcript });
-        if (result.status !== 200) {
-            console.log(result);
-        } else {
+        try {
+            const result = await axios.post(`${domain}/query`, { chat_history: messages, transcript: transcript });
             let chatHistory = result.data.response.chat_history;
             setMessages(chatHistory);
+        } catch (error) {
+            console.log(error);
+        } finally {
             setInput("");
+            setLoading(false);
         }
-        setLoading(false);
     };
 
     const uploadTranscript = async () => {
@@ -74,30 +75,34 @@ function App() {
                     </Box>
                 </Box>
                 <Box maxWidth={"100%"} mt={5}>
-                    <TextField
-                        id="outlined-basic"
-                        variant="outlined"
-                        value={input}
-                        className={classN}
-                        placeholder="Ask a question..."
-                        style={{ fontStyle: "italic" }} // Italicized placeholder
-                        onChange={(e) => setInput(e.target.value)}
-                        onKeyDown={(e) => {
-                            if (e.key === "Enter") {
-                                handleQuery();
-                            }
-                        }}
-                        InputProps={{
-                            style: { height: "4rem" },
-                            startAdornment: (
-                                <InputAdornment position="start">
-                                    <SearchIcon />
-                                </InputAdornment>
-                            ),
-                        }}
-                        fullWidth
-                        sx={{ "& fieldset": loading ? { border: "none" } : { border: "3px solid gray" } }}
-                    />
+                    {loading ? (
+                        <LinearProgress />
+                    ) : (
+                        <TextField
+                            id="outlined-basic"
+                            variant="outlined"
+                            value={input}
+                            className={classN}
+                            placeholder="Ask a question..."
+                            style={{ fontStyle: "italic" }} // Italicized placeholder
+                            onChange={(e) => setInput(e.target.value)}
+                            onKeyDown={(e) => {
+                                if (e.key === "Enter") {
+                                    handleQuery();
+                                }
+                            }}
+                            InputProps={{
+                                style: { height: "4rem" },
+                                startAdornment: (
+                                    <InputAdornment position="start">
+                                        <SearchIcon />
+                                    </InputAdornment>
+                                ),
+                            }}
+                            fullWidth
+                            sx={{ "& fieldset": loading ? { border: "none" } : { border: "3px solid gray" } }}
+                        />
+                    )}
                 </Box>
             </Box>
         </Box>

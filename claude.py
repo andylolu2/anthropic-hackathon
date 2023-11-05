@@ -9,7 +9,7 @@ load_dotenv()
 
 class Claude:
     def __init__(self):
-        self.model = ChatAnthropic(max_tokens=10_000)
+        self.model = ChatAnthropic(max_tokens=4096)
 
     def ask_claude_md(self, query: str):
         parser = MarkdownOutputParser()

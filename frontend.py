@@ -5,7 +5,12 @@ import uvicorn
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from langchain.globals import set_debug
 from pydantic import BaseModel
+
+from llm_diag import DiagnosisLLM
+
+set_debug(True)
 
 app = FastAPI()
 
@@ -31,13 +36,21 @@ class Message(BaseModel):
     sources: Optional[List[Source]] = None
 
 
-class Transcript(BaseModel):
-    transcript: List[Message]
-
-
 class Query(BaseModel):
     transcript: List[Message]
     chat_history: List[Message]
+
+
+model = DiagnosisLLM()
+model.init_extraction_chains()
+
+
+def transcript_to_str(transcript: list[Message]) -> str:
+    result = []
+    for message in transcript:
+        role = message.role.capitalize()
+        result.append(f"{role}:\n{message.content}")
+    return "\n\n".join(result)
 
 
 @app.post("/query")
@@ -48,11 +61,23 @@ async def query_agent(query: Query):
     if len(transcript) == 0:
         raise HTTPException(status_code=400, detail="Transcript cannot be empty")
 
-    if len(chat_history) == 0:
-        # Initial request
-        chat_history.append(Message(role="AI", content="Investigating..."))
+    if model.keywords is None:
+        transcript_text = transcript_to_str(transcript)
+        model.extract_from_transcript(transcript_text)
+
+    # if model.knowledge is None:  # Can refetch after each round too
+    #     model.init_conv_chain()
+    model.init_conv_chain()
+
+    if len(chat_history) <= 1:  # Initial request
+        model.memory.chat_memory.messages = []
+        model.new_conv_message("investigate")
+        output = model.memory.chat_memory.messages[-1].content
+        chat_history.append(Message(role="AI", content=output))
     else:
-        chat_history.append(Message(role="AI", content="I'm still thinking..."))
+        model.new_conv_message(chat_history[-1].content)
+        output = model.memory.chat_memory.messages[-1].content
+        chat_history.append(Message(role="AI", content=output))
 
     return {"response": {"chat_history": chat_history}}
 
