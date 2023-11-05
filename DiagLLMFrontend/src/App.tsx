@@ -1,7 +1,6 @@
 import "./App.css";
 
 import axios from "axios";
-import { jwtDecode } from "jwt-decode";
 import React, { useEffect, useState } from "react";
 
 import EmojiPeopleIcon from "@mui/icons-material/EmojiPeople";
@@ -9,108 +8,88 @@ import SearchIcon from "@mui/icons-material/Search";
 import { Box, Button, InputAdornment, TextField, Typography } from "@mui/material";
 
 import Chat from "./Chat";
-import { write_to_log } from "./global"; // import dependency
-import LoginForm from "./LoginForm";
-import { MessageProps } from "./Message";
+import Message, { MessageProps } from "./Message";
 
-function sleep(time: number) {
-    return new Promise((resolve) => setTimeout(resolve, time));
-}
+let domain = window.location.origin;
 
 function App() {
     const [input, setInput] = useState("");
     const [loading, setLoading] = useState(false);
     const [messages, setMessages] = useState<MessageProps[]>([]);
-    const [loggedIn, setLoggedIn] = useState(false);
-    const user = JSON.parse(localStorage.getItem("user") as any | {});
-
-    async function googleLogin(token: string) {
-        const decoded = jwtDecode(token) as any;
-        localStorage.setItem("user", JSON.stringify(decoded));
-        write_to_log(`${decoded.name} has logged in to Torstone Intelligence`);
-        setLoggedIn(true);
-    }
-
-    function clearCookie(cookieName: string) {
-        // Set the cookie to expire in the past (i.e., instantly clear it)
-        document.cookie = `${cookieName}=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;`;
-    }
-
-    function extractGStateCookie(cookieString: string) {
-        // Define a regex pattern to match the "g_state" cookie
-        const regex = /g_state=([^;]+)/;
-
-        // Use the regex pattern to search for the "g_state" cookie
-        const match = cookieString.match(regex);
-
-        // Check if a match is found
-        if (match) {
-            // The cookie value is captured in the first group of the match
-            return match[1];
-        } else {
-            // If no match is found, return null or handle accordingly
-            return null;
-        }
-    }
-
-    function isUserLoggedIn() {
-        return extractGStateCookie(document.cookie) !== null;
-    }
-
-    const getChatHistory = async () => {
-        const result = await axios.get("http://localhost:5000/chat-history");
-        setMessages(result.data.response);
-    };
+    const [transcript, setTranscript] = useState<MessageProps[]>([]);
 
     const handleQuery = async () => {
         setLoading(true);
         setInput("Torstone Intelligence is working on your query...");
-        write_to_log(`${user.name} has asked the following question to Torstone Intelligence: ${input}`);
-        const result = await axios.post("http://localhost:5000/query", { query: input });
+        messages.push({ role: "DOCTOR", content: input });
+        const result = await axios.post(`${domain}/query`, { chat_history: messages, transcript: transcript });
         let chatHistory = result.data.response.chat_history;
-        chatHistory[chatHistory.length - 1].sources = result.data.response.sources;
         setMessages(chatHistory);
         setLoading(false);
         setInput("");
     };
 
-    useEffect(() => {
-        getChatHistory();
-        setLoggedIn(isUserLoggedIn());
-    });
+    const uploadTranscript = async () => {
+        console.log("uploading transcript");
+        let transcript = [
+            { role: "DOCTOR", content: "Hello, I am Dr. Smith. How can I help you today?" } as MessageProps,
+            { role: "PATIENT", content: "I have a headache." } as MessageProps,
+            { role: "DOCTOR", content: "How long have you had this headache?" } as MessageProps,
+            { role: "PATIENT", content: "About 3 days." } as MessageProps,
+            {
+                role: "DOCTOR",
+                content:
+                    "How long have you had this headache? How long have you had this headache? How long have you had this headache? How long have you had this headache? How long have you had this headache? ",
+            } as MessageProps,
+            { role: "PATIENT", content: "I have a headache." } as MessageProps,
+            { role: "DOCTOR", content: "How long have you had this headache?" } as MessageProps,
+            { role: "PATIENT", content: "About 3 days." } as MessageProps,
+            {
+                role: "DOCTOR",
+                content:
+                    "How long have you had this headache? How long have you had this headache? How long have you had this headache? How long have you had this headache? How long have you had this headache? ",
+                sources: [{ source: "https://www.google.com", title: "Google" }],
+            } as MessageProps,
+        ];
+        setTranscript(transcript);
+    };
 
     const classN = loading ? "gradient-border" : "";
-    return !loggedIn ? (
-        <LoginForm onGoogleLogin={googleLogin} />
-    ) : (
+    return (
         <Box pb={"5%"}>
             <Box display={"flex"} justifyContent={"space-between"} mt={1} p={2}>
                 <Box display={"flex"} alignItems={"center"}>
                     <EmojiPeopleIcon sx={{ fontSize: "2.5rem" }} />
-                    <Typography variant={"h6"} ml={1}>
-                        {user["name"]}
-                    </Typography>
                 </Box>
                 <Box display={"flex"} className={"logout-button"}>
-                    <Button
-                        sx={{ fontSize: "16px" }}
-                        onClick={() => {
-                            clearCookie("g_state");
-                            setLoggedIn(false);
-                        }}
-                    >
-                        Log out
+                    <Button sx={{ fontSize: "16px" }} onClick={uploadTranscript} color={"secondary"}>
+                        Upload transcript
                     </Button>
                 </Box>
             </Box>
-            <Box pl={"15%"} mt={"5%"}>
-                <Typography variant={"h2"} fontSize={"calc(1.6rem + 2   vw)"} fontWeight={800}>
-                    Torstone Intelligence
+            <Box pl={"15%"} pr={"15%"} mt={"5%"}>
+                <Typography variant={"h2"} fontSize={"calc(1.6rem + 2   vw)"} fontWeight={800} mb={4}>
+                    Junior Doctor
                 </Typography>
-                <Box maxWidth={"75%"}>
-                    <Chat messages={messages} user={user} />
+                <Box display="flex" position={"relative"}>
+                    <Box sx={{ backgroundColor: "primary.main", borderRadius: "0.5em" }} width={"50%"} p={2} mr={1} overflow={"auto"}>
+                        <Typography variant={"h4"} display={"block"} fontSize={"calc(1.6rem + 2   vw)"} fontWeight={800}>
+                            Transcript
+                        </Typography>
+                        <Box sx={{ borderRadius: "0.5em" }} overflow={"auto"} maxHeight={500}>
+                            <Chat messages={transcript} />
+                        </Box>
+                    </Box>
+                    <Box sx={{ backgroundColor: "primary.main", borderRadius: "0.5em" }} width={"50%"} p={2} ml={1}>
+                        <Typography variant={"h4"} display={"block"} fontSize={"calc(1.6rem + 2   vw)"} fontWeight={800}>
+                            Conversation
+                        </Typography>
+                        <Box sx={{ borderRadius: "0.5em" }} overflow={"auto"} maxHeight={500}>
+                            <Chat messages={messages} />
+                        </Box>
+                    </Box>
                 </Box>
-                <Box maxWidth={"75%"} mt={5}>
+                <Box maxWidth={"100%"} mt={5}>
                     <TextField
                         id="outlined-basic"
                         variant="outlined"
@@ -130,7 +109,7 @@ function App() {
                         fullWidth
                         sx={{ "& fieldset": loading ? { border: "none" } : { border: "3px solid gray" } }}
                     />
-                    <Button variant="contained" sx={{ mt: 2 }} onClick={handleQuery}>
+                    <Button variant="contained" sx={{ mt: 2 }} color={"secondary"} onClick={handleQuery}>
                         Get Answer
                     </Button>
                 </Box>

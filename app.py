@@ -1,22 +1,41 @@
+<<<<<<< HEAD
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from waitress import serve
 from llm_diag import DiagnosisLLM
+=======
+import os
+from typing import List, Literal, Optional
+>>>>>>> 702775b (Frontend prettify)
 
-app = Flask(__name__)
-CORS(app)
+import uvicorn
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel
+
+<<<<<<< HEAD
+=======
+app = FastAPI()
+
+origins = ["*"]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+>>>>>>> 702775b (Frontend prettify)
+
+class Source(BaseModel):
+    source: str
+    title: str
 
 
-@app.route('/query', methods=['POST'])
-def query_agent():
-    data = request.json
-    response = confluence_qa.answer_confluence(data["query"])
-    return jsonify({"response": response})
-
-@app.route('/')
-def index():
-    return 'Index Page'
-
+<<<<<<< HEAD
 if __name__ == '__main__':
     # serve(app, host="0.0.0.0", port=5000)
     transcript = """
@@ -665,3 +684,46 @@ Thank you!
     LLM = DiagnosisLLM()
     LLM.init_extraction_chain()
     LLM.extract_from_transcript(transcript)
+=======
+class Message(BaseModel):
+    role: Literal["DOCTOR", "PATIENT", "AI"]
+    content: str
+    sources: Optional[List[Source]] = None
+
+
+class Transcript(BaseModel):
+    transcript: List[Message]
+
+
+class Query(BaseModel):
+    transcript: List[Message]
+    chat_history: List[Message]
+
+
+@app.post("/query")
+async def query_agent(query: Query):
+    transcript = query.transcript
+    chat_history = query.chat_history
+    print(transcript)
+    print(chat_history)
+    chat_history.append(Message(role="AI", content="This is a response"))
+    return {"response": {"chat_history": chat_history}}
+
+
+app.mount("/", StaticFiles(directory="DiagLLMFrontend/build", html=True), name="static")
+
+if __name__ == "__main__":
+    USE_NGROK = os.environ.get("USE_NGROK", False)
+
+    if USE_NGROK:
+        import nest_asyncio
+        from pyngrok import ngrok
+
+        port = 5000
+        public_url = ngrok.connect(port).public_url
+        nest_asyncio.apply()
+
+        print(f"Running on {public_url}")
+
+    uvicorn.run("app:app", host="0.0.0.0", port=5000, reload=True)
+>>>>>>> 702775b (Frontend prettify)
