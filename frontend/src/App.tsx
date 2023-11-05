@@ -8,6 +8,7 @@ import SearchIcon from "@mui/icons-material/Search";
 import { Box, Button, InputAdornment, LinearProgress, TextField, Typography } from "@mui/material";
 
 import Chat from "./Chat";
+import logo from "./cut.jpg";
 import data from "./data_bad.json";
 import { MessageProps } from "./Message";
 
@@ -21,7 +22,7 @@ function App() {
 
     const handleQuery = async () => {
         setLoading(true);
-        setInput("Junior doctor is working on your query...");
+        setInput("HealthECHO is working on your query...");
         messages.push({ role: "DOCTOR", content: input });
         try {
             const result = await axios.post(`${domain}/query`, { chat_history: messages, transcript: transcript });
@@ -54,7 +55,18 @@ function App() {
             </Box>
             <Box pl={"15%"} pr={"15%"} mt={"5%"}>
                 <Typography variant={"h2"} fontSize={"calc(1.6rem + 2   vw)"} fontWeight={800} mb={4}>
-                    HealthEcho
+                    HealthECHO
+                    <Box
+                        component="img"
+                        sx={{
+                            marginTop: "-10px",
+                            height: 80,
+                            float: "right",
+                            width: "auto",
+                        }}
+                        alt="The house from the offer."
+                        src={logo}
+                    />
                 </Typography>
                 <Box display="flex" position={"relative"}>
                     <Box sx={{ backgroundColor: "primary.main", borderRadius: "0.5em" }} width={"50%"} p={3} mr={2} overflow={"auto"}>

@@ -99,7 +99,7 @@ I want you to look at this conversation between a doctor and a patient. I want y
 
 class DiagnosisLLM:
     def __init__(self):
-        self.llm = ChatAnthropic(temperature=0.1, max_tokens=4096, cache=True)
+        self.llm = ChatAnthropic(temperature=0.2, max_tokens=4096, cache=True)
         self.keywords = None
         self.conv_chain = None
         self.keyword_chain = None
@@ -213,7 +213,8 @@ class DiagnosisLLM:
             device="cuda" if torch.cuda.is_available() else "cpu",
         )
 
-        MONGODB_ATLAS_CLUSTER_URI = "mongodb+srv://evanrex:c1UgqaM0U2Ay72Es@cluster0.ebrorq5.mongodb.net/?retryWrites=true&w=majority"
+        # MONGODB_ATLAS_CLUSTER_URI = "mongodb+srv://evanrex:c1UgqaM0U2Ay72Es@cluster0.ebrorq5.mongodb.net/?retryWrites=true&w=majority"
+        MONGODB_ATLAS_CLUSTER_URI = os.environ["MONGODB_ATLAS_CLUSTER_URI"]
         ATLAS_VECTOR_SEARCH_INDEX_NAME = "embedding"
 
         vector_search = MongoDBAtlasVectorSearch.from_connection_string(
@@ -234,7 +235,7 @@ class DiagnosisLLM:
             results_list.append(doc.page_content)
         return results_list
 
-    def get_context(self, k_brave=0, k_medwise=4, k_textbook=0):
+    def get_context(self, k_brave=1, k_medwise=5, k_textbook=1):
         brave = self.get_context_from_brave(k=k_brave)
         print("==============brave=================")
         new_brave = json.loads(brave)
