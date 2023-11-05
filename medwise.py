@@ -2,8 +2,7 @@ import warnings
 
 import requests
 from bs4 import BeautifulSoup, Comment
-
-from claude import ask_claude_md
+from llm_diag import Claude
 from prompts import CLEAN_HTML_PROMPT
 
 
@@ -24,7 +23,7 @@ def scrape(url: str, render_js: bool = False):
     return html
 
 
-def clean_html(html: str):
+def clean_html(html: str, claude):
     soup = BeautifulSoup(html, "html.parser")
 
     # remove all scripts, styles, headers, navigation, footer, svg paths
@@ -38,12 +37,13 @@ def clean_html(html: str):
     small_html = soup.prettify()
 
     # ask claude to clean it up
-    result = ask_claude_md(CLEAN_HTML_PROMPT.format(html=small_html))
+    result = claude.ask_claude_md(CLEAN_HTML_PROMPT.format(html=small_html))
 
     return result
 
 
 def query_medwise(query: str = "HIV testing", k: int = 1, render_js: bool = False):
+    claude = Claude()
     MEDWISE = "https://ask.medwise.ai/api/ask"
 
     body = {

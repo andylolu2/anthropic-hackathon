@@ -1,6 +1,12 @@
 anthropic
-langchain
+langchain~=0.0.330
 python-dotenv
-waitress
-flask
+waitress~=2.1.2
+flask~=3.0.0
 flask_cors
+torch~=2.1.0
+transformers~=4.35.0
+bs4~=0.0.1
+requests~=2.31.0
+beautifulsoup4~=4.12.2
+pydantic~=2.4.2
