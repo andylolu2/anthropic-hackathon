@@ -1,10 +1,10 @@
 from flask import Flask, request, jsonify
-# from flask_cors import CORS
-# from waitress import serve
+from flask_cors import CORS
+from waitress import serve
 from llm_diag import DiagnosisLLM
 
-# app = Flask(__name__)
-# CORS(app)
+app = Flask(__name__)
+CORS(app)
 
 
 @app.route('/query', methods=['POST'])
@@ -654,5 +654,5 @@ Thank you!
 
     """
     LLM = DiagnosisLLM()
-    LLM.init_extraction_chain()
+    LLM.init_extraction_chains()
     LLM.extract_from_transcript(transcript)

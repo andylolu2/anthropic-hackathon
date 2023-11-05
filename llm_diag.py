@@ -59,47 +59,7 @@ logfile = "output.log"
 # logger.add(logfile, colorize=True, enqueue=True)
 handler = FileCallbackHandler(logfile)
 
-from dotenv import load_dotenv
 
-from custom_parser import MarkdownOutputParser
-
-load_dotenv()
-
-
-class Claude():
-    def __init__(self):
-        self.model = ChatAnthropic(max_tokens=10_000)
-
-    def ask_claude(self, query: str, answer_beginning: str = ""):
-        prompt = PromptTemplate(
-            template="""
-
-            Human:
-            {query}
-            Assistant:
-            {answer_beginning}""",
-            input_variables=["query", "answer_beginning"],
-        )
-
-        chain = prompt | self.model
-        return chain.invoke({"query": query, "answer_beginning": answer_beginning}).content
-
-    def ask_claude_md(self, query: str):
-        parser = MarkdownOutputParser()
-        prompt = PromptTemplate(
-            template="""
-
-            Human:
-            {query}
-            {format_instructions}
-            Assistant:
-            """,
-            input_variables=["query"],
-            partial_variables={"format_instructions": parser.get_format_instructions()},
-        )
-
-        chain = prompt | self.model | parser
-        return chain.invoke({"query": query})
 
 
 def get_investigate_prompt():
@@ -145,10 +105,11 @@ def get_extraction_prompt():
     ])
     return prompt
 
+
 def get_keyword_prompt():
     prompt = ChatPromptTemplate.from_messages([
         ("system",
-        "You are a helpful chatbot with a lot of knowledge about the medical domain. You are observing a conversation of a patient who is describing their symptoms to a doctor. You want to help them by extracting the most important information from their description. "),
+         "You are a helpful chatbot with a lot of knowledge about the medical domain. You are observing a conversation of a patient who is describing their symptoms to a doctor. You want to help them by extracting the most important information from their description. "),
         ("human", """I want you to look at this conversation between a doctor and a patient. I want you to extract three to ten keywords that summarize the important medical topics related to this patient. Reply with these keywords as a list and nothing else.
     
     {conversation}
@@ -181,11 +142,14 @@ class CustomPromptTemplate(StringPromptTemplate):
 
 class DiagnosisLLM:
     def __init__(self):
+        self.keywords = None
+        self.summary = None
         self.embedding = None
         self.vectordb = None
         self.llm = None
         self.conv_chain = None
-        self.extraction_chain = None
+        self.summary_chain = None
+        self.keyword_chain = None
         self.retriever = None
         self.memory = None
         self.docs = None
@@ -206,15 +170,14 @@ class DiagnosisLLM:
         out = self.conv_chain.run({"input": message})
         print(self.memory)
 
-
     def extract_from_transcript(self, transcript):
-        self.summary = self.summary_chain.invoke({"conversation": transcript})
         self.keywords = self.keyword_chain.invoke({"conversation": transcript})
+        time.sleep(2)
+        self.summary = self.summary_chain.invoke({"conversation": transcript})
         print("==========summary========")
         print(self.summary)
         print("==========keywords========")
         print(self.keywords)
-
 
     def init_extraction_chains(self) -> None:
         summary_prompt = get_extraction_prompt()
@@ -248,7 +211,7 @@ class DiagnosisLLM:
 
         brave_search_tool = BraveSearch.from_api_key(api_key=BRAVE_API_KEY, search_kwargs={"count": k})
         print(brave_search_tool)
-        
+
         out = brave_search_tool.run(f"Medical documents on: {self.topics}")  # TODO prompt engineer improvement
         return out
         # tools = [
@@ -277,7 +240,6 @@ class DiagnosisLLM:
         Returns:
             _type_: ({"url": url, "content": content})
         """
-
 
         results = query_medwise(self.topics, k=k, render_js=render_js)
         return results
@@ -334,7 +296,6 @@ class DiagnosisLLM:
         print("==============textbook=================")
         print(textbook)
 
-        
     #
     #
     # def load_confluence_documents_from_all_spaces(self):

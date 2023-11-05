@@ -2,7 +2,7 @@ import warnings
 
 import requests
 from bs4 import BeautifulSoup, Comment
-from llm_diag import Claude
+from claude import Claude
 from prompts import CLEAN_HTML_PROMPT
 
 
