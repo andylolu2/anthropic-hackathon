@@ -162,31 +162,6 @@ I want you to look at this conversation between a doctor and a patient. I want y
     return prompt
 
 
-def parse_context(context):
-    guidelines_knowledge = "<guidelines>\n"
-    for item in context["guidelines"]:
-        text = item["content"]
-        guidelines_knowledge += f"<content>\n{text}\n</content>\n\n"
-    guidelines_knowledge += "</guidelines>"
-
-    textbook_knowledge = "<textbook>\n"
-    for text in context["textbook"]:
-        textbook_knowledge += f"<content>\n{text}\n</content>\n\n"
-    textbook_knowledge += "</textbook>"
-
-    web_knowledge = "<web_search>\n"
-    for item in context["web"]:
-        title = item["title"]
-        text = item["snippet"]
-        web_knowledge += f"<title>\n{title}\n</title>\n"
-        web_knowledge += f"<content>\n{text}\n</content>\n\n"
-    web_knowledge += "</web_search>"
-
-    knowledge = guidelines_knowledge + "\n" + textbook_knowledge + "\n" + web_knowledge
-    print(knowledge)
-    return knowledge
-
-
 class DiagnosisLLM:
     def __init__(self):
         self.keywords = None
@@ -196,26 +171,73 @@ class DiagnosisLLM:
         self.summary_chain = None
         self.keyword_chain = None
         self.memory = None
-        self.knowledge = None
         self.transcript = None
+        self.context = None
 
     def init_conv_chain(self) -> None:
         self.llm = ChatAnthropic(temperature=0, max_tokens=4096)
         self.memory = ConversationSummaryBufferMemory(
             return_messages=True, llm=self.llm
         )
-        context = self.get_context()
-        self.knowledge = parse_context(context)
-        investigation_prompt = get_investigate_prompt(self.knowledge, self.transcript)
+        self.get_context()
+        knowledge = self.parse_context()
+        investigation_prompt = get_investigate_prompt(knowledge, self.transcript)
         self.conv_chain = ConversationChain(
             llm=self.llm,
             memory=self.memory,
             prompt=investigation_prompt,
         )
 
-    def new_conv_message(self, message):
-        self.conv_chain.run({"input": message})
-        print(self.memory)
+    def parse_context(self):
+        guidelines_knowledge = "<guidelines>\n"
+        for item in self.context["guidelines"]:
+            text = item["content"]
+            guidelines_knowledge += f"<content>\n{text}\n</content>\n\n"
+        guidelines_knowledge += "</guidelines>"
+
+        textbook_knowledge = "<textbook>\n"
+        for text in self.context["textbook"]:
+            textbook_knowledge += f"<content>\n{text}\n</content>\n\n"
+        textbook_knowledge += "</textbook>"
+
+        web_knowledge = "<web_search>\n"
+        for item in self.context["web"]:
+            title = item["title"]
+            text = item["snippet"]
+            web_knowledge += f"<title>\n{title}\n</title>\n"
+            web_knowledge += f"<content>\n{text}\n</content>\n\n"
+        web_knowledge += "</web_search>"
+
+        knowledge = (
+            guidelines_knowledge + "\n" + textbook_knowledge + "\n" + web_knowledge
+        )
+        return knowledge
+
+    def get_chat_history(self):
+        chat_history = []
+        for message in self.memory.chat_memory.messages:
+            role = type(message).__name__
+            chat_history.append({"role": role, "content": message.content})
+        return chat_history
+
+    def get_sources(self):
+        links = {"guidelines": [], "web": []}
+        for guideline in self.context["guidelines"]:
+            url = guideline["url"]
+            links["guidelines"].append(url)
+        for web_res in self.context["web"]:
+            url = web_res["link"]
+            links["web"].append(url)
+        return links
+
+    def answer_doctor_query(self, query: str):
+        """
+        Answer the doctor's query backed by the knowledge relevant to the patient's condition
+        """
+        self.conv_chain.run({"input": query})
+        chat_history_so_far = self.get_chat_history()
+        links = self.get_sources()
+        return {"chat_history": chat_history_so_far, "sources": links}
 
     def extract_from_transcript(self, transcript):
         self.transcript = transcript
@@ -326,4 +348,4 @@ class DiagnosisLLM:
         textbook = self.get_context_from_textbook(k=k_textbook)
         print("==============textbook=================")
         # print(textbook)
-        return {"guidelines": medwise, "textbook": textbook, "web": new_brave}
+        self.context = {"guidelines": medwise, "textbook": textbook, "web": new_brave}
