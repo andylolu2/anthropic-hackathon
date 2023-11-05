@@ -57,7 +57,7 @@ async def query_agent(query: Query):
     return {"response": {"chat_history": chat_history}}
 
 
-app.mount("/", StaticFiles(directory="DiagLLMFrontend/build", html=True), name="static")
+app.mount("/", StaticFiles(directory="frontend/build", html=True), name="static")
 
 if __name__ == "__main__":
     USE_NGROK = os.environ.get("USE_NGROK", False)
