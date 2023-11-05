@@ -145,6 +145,17 @@ def get_extraction_prompt():
     ])
     return prompt
 
+def get_keyword_prompt():
+    prompt = ChatPromptTemplate.from_messages([
+        ("system",
+        "You are a helpful chatbot with a lot of knowledge about the medical domain. You are observing a conversation of a patient who is describing their symptoms to a doctor. You want to help them by extracting the most important information from their description. "),
+        ("human", """I want you to look at this conversation between a doctor and a patient. I want you to extract three to ten keywords that summarize the important medical topics related to this patient. Reply with these keywords as a list and nothing else.
+    
+    {conversation}
+    """),
+    ])
+    return prompt
+
 
 def get_quick_answer():
     chat = ChatAnthropic(model='claude-2')
@@ -195,14 +206,22 @@ class DiagnosisLLM:
         out = self.conv_chain.run({"input": message})
         print(self.memory)
 
-    def extract_from_transcript(self, transcript):
-        out = self.extraction_chain.invoke({"conversation": transcript})
-        print(out)
 
-    def init_extraction_chain(self) -> None:
-        prompt = get_extraction_prompt()
+    def extract_from_transcript(self, transcript):
+        self.summary = self.summary_chain.invoke({"conversation": transcript})
+        self.keywords = self.keyword_chain.invoke({"conversation": transcript})
+        print("==========summary========")
+        print(self.summary)
+        print("==========keywords========")
+        print(self.keywords)
+
+
+    def init_extraction_chains(self) -> None:
+        summary_prompt = get_extraction_prompt()
+        keyword_prompt = get_keyword_prompt()
         self.llm = ChatAnthropic(model="claude-2", temperature=0.5)
-        self.extraction_chain = prompt | self.llm
+        self.summary_chain = summary_prompt | self.llm
+        self.keyword_chain = keyword_prompt | self.llm
 
         # schema = {
         #     "properties": {
@@ -215,7 +234,7 @@ class DiagnosisLLM:
         # self.extraction_chain = create_extraction_chain(schema, self.llm)
         # print(self.extraction_chain)
 
-    def get_context_from_brave(self, topics, k=5):
+    def get_context_from_brave(self, k=5):
         """
         Uses brave to perform a semantic internet search for relevant medical documents to the provided topics.
 
@@ -229,7 +248,8 @@ class DiagnosisLLM:
 
         brave_search_tool = BraveSearch.from_api_key(api_key=BRAVE_API_KEY, search_kwargs={"count": k})
         print(brave_search_tool)
-        out = brave_search_tool.run(f"Medical documents on: {topics}")  # TODO prompt engineer improvement
+        
+        out = brave_search_tool.run(f"Medical documents on: {self.topics}")  # TODO prompt engineer improvement
         return out
         # tools = [
         #     Tool(
@@ -247,7 +267,7 @@ class DiagnosisLLM:
         #                                memory=self.memory)
         # agent_chain.run(input=question)
 
-    def get_context_from_medwise(self, topics, k=5, render_js: bool = False):
+    def get_context_from_medwise(self, k=5, render_js: bool = False):
         """Performs internet scraping from Medwise for useful documents.
 
         Args:
@@ -258,12 +278,11 @@ class DiagnosisLLM:
             _type_: ({"url": url, "content": content})
         """
 
-        query = " ".join(topics)
 
-        results = query_medwise(query, k=k, render_js=render_js)
+        results = query_medwise(self.topics, k=k, render_js=render_js)
         return results
 
-    def get_context_from_textbook(self, summary, k=5):
+    def get_context_from_textbook(self, k=5):
         """
         Performs vector search on mongoDB McLeod clinical diagnosis textbook
 
@@ -293,7 +312,7 @@ class DiagnosisLLM:
         )
 
         results = vector_search.similarity_search_with_score(
-            query=summary,
+            query=self.summary,
             k=k,
         )  # TODO use paragraph.next and paragraph.prev to get window around returned documents
 
@@ -304,6 +323,18 @@ class DiagnosisLLM:
         #     print(content.page_content)
         return results
 
+    def get_context(self, k_brave=5, k_medwise=5, k_textbook=5):
+        brave = self.get_context_from_brave(k=k_brave)
+        medwise = self.get_context_from_medwise(k=k_medwise)
+        textbook = self.get_context_from_textbook(k=k_textbook)
+        print("==============brave=================")
+        print(brave)
+        print("==============medwise=================")
+        print(medwise)
+        print("==============textbook=================")
+        print(textbook)
+
+        
     #
     #
     # def load_confluence_documents_from_all_spaces(self):
